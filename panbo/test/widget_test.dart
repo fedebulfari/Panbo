@@ -8,23 +8,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:panbo/game_model.dart';
 import 'package:panbo/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('advances the game through its phases', (tester) async {
+    await tester.pumpWidget(const PanboApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.text('Turno 1'), findsOneWidget);
+    expect(find.text('Dado evento'), findsWidgets);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+    await tester.tap(find.text('Continua'));
     await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Dado meteo'), findsWidgets);
+  });
+
+  test('recruits a troop by spending grain', () {
+    final game = GameState();
+
+    expect(game.recruit('Briganti'), isTrue);
+    expect(game.troops['Briganti'], 1);
+    expect(game.resources['Grano'], 9);
   });
 }
