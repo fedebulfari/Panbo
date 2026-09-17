@@ -1,11 +1,11 @@
 import 'game_model.dart';
 
 enum Buildings {
-  arsenal(GameItem(name: 'Arsenale',icon: '🏰',woodCost: 10,stoneCost: 10, ironCost: 1,capacity: 250)),
+  arsenal(GameItem(name: 'Arsenale',icon: '🏰',woodCost: 10,stoneCost: 10, ironCost: 1,capacity: 250, requirement: warehouse)),
   barracks(GameItem(name: 'Caserma', icon: '🛡️', woodCost: 10, stoneCost: 10)),
-  bifurcation(GameItem(name: 'Bivio', icon: '🛣️', stoneCost: 5)),
+  bifurcation(GameItem(name: 'Bivio', icon: '🛣️', stoneCost: 5, requirement: road)),
   bridge(GameItem(name: 'Ponte', icon: '🌉', stoneCost: 5)),
-  cityWall(GameItem(name: 'Mura della Città', icon: '城墙', stoneCost: 20, ironCost: 2)),
+  cityWall(GameItem(name: 'Mura della Città', icon: '城墙', stoneCost: 20, ironCost: 2, requirement: wall)),
   forge(GameItem(name: 'Forgia', icon: '⚒️', stoneCost: 50)),
   harbor(GameItem(name: 'Porto', icon: '⚓', woodCost: 30)),
   river(GameItem(name: 'Fiume', icon: '🌊', woodCost: 10, stoneCost: 5)),

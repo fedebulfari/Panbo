@@ -9,11 +9,22 @@ enum TurnPhase { weather, gather, payup, expand, cleanup }
 
 extension TurnPhaseLabel on TurnPhase {
   String get label => switch (this) {
-    TurnPhase.weather => 'Meteo',
+    TurnPhase.weather => 'Setup',
     TurnPhase.gather => 'Raccolta',
     TurnPhase.payup => 'Pagamento',
     TurnPhase.expand => 'Azioni',
     TurnPhase.cleanup => 'Pulizia',
+  };
+}
+enum WeatherType { cold, warm, sunny, rainy, stormy }
+
+extension WeatherTypeLabel on WeatherType {
+  String get label => switch (this) {
+    WeatherType.cold => 'Bufera Gelida',
+    WeatherType.warm => 'Caldo Torrido',
+    WeatherType.sunny => 'Soleggiato',
+    WeatherType.rainy => 'Piovoso',
+    WeatherType.stormy => 'Tempestoso',
   };
 }
 
@@ -25,12 +36,14 @@ class GameItem {
     this.wheatCost = 0,
     this.woodCost = 0,
     this.stoneCost = 0,
+    this.rawIronCost=0,
     this.ironCost = 0,
     this.horseCost = 0,
     this.woolCost = 0,
     this.capacity = 0,
     this.gain = 0,
     this.territory,
+    this.requirement,
   });
   final String name;
   final String icon;
@@ -39,24 +52,26 @@ class GameItem {
   final int woodCost;
   final int stoneCost;
   final int ironCost;
+  final int rawIronCost;
   final int horseCost;
   final int woolCost;
   final int capacity;
   final int gain;
   final Territories? territory;
+  final Buildings? requirement;
 }
 
 class GameState extends ChangeNotifier {
   int turn = 1;
+  int irrigatedfields = 0; 
   TurnPhase phase = TurnPhase.weather;
-  bool isCold = false; // Se true, l'inverno raddoppia i costi delle truppe
+  bool isRainy = false;
+  bool isCold = false;
+  WeatherType currentWeather = WeatherType.sunny;
   int currentDeficit = 0;
   bool get hasDeficit => currentDeficit > 0;
   int currentExcess = 0;
   bool get hasExcess => currentExcess > 0;
-
-  // Traccia quanti fiumi bagnano ciascun campo
-  Map<int, int> fieldIrrigation = {}; 
 
   final Map<GameItem, int> resources = {
     for (final territory in Resources.values) territory.item: 0,
@@ -127,23 +142,23 @@ class GameState extends ChangeNotifier {
   }
 
   void collectResources() {
-    for (final key in resources.keys) {
-      if (key == Resources.wheat.item) {
-        int totalWheatGain = 0;
-        // Calcola il guadagno di ogni campo in base ai fiumi collegati
-        fieldIrrigation.forEach((fieldIndex, riversCount) {
-          int baseGain = Territories.field.item.gain;
-          totalWheatGain += baseGain * (riversCount > 0 ? riversCount : 1);
-        });
-        resources[key] = (resources[key] ?? 0) + totalWheatGain;
-      } else {
-        if (key.territory != null) {
-          int currentResourceAmount = resources[key] ?? 0;
-          int territoryGain = key.territory!.item.gain;
-          int territoryCount = territories[key.territory!.item] ?? 0;
+    // 1. Calcola la produzione del grano
+    int wheatGain = Territories.field.item.gain * irrigatedfields;
+    
+    // 2. Se c'è un temporale, la PRODUZIONE viene dimezzata (usando la divisione intera '~/')
+    if (currentWeather == WeatherType.stormy) {
+      wheatGain = wheatGain ~/ 2;
+    }
+    
+    resources[Resources.wheat.item] = (resources[Resources.wheat.item] ?? 0) + wheatGain;
 
-          resources[key] = currentResourceAmount + (territoryGain * territoryCount);
-        }
+    for (final key in resources.keys) {
+      if (key.territory != null && key != Resources.wheat.item) {
+        int currentResourceAmount = resources[key] ?? 0;
+        int territoryGain = key.territory!.item.gain;
+        int territoryCount = territories[key.territory!.item] ?? 0;
+
+        resources[key] = currentResourceAmount + (territoryGain * territoryCount);
       }
     }
     notifyListeners();
@@ -156,7 +171,7 @@ class GameState extends ChangeNotifier {
     if (territories.containsKey(item)) {
       return item.wheatCost > 0 ? item.wheatCost : item.cost;
     }
-    return 0; // Risorse o imbarcazioni non costano mantenimento qui
+    return 0;
   }
 
   void _processPayUp() {
@@ -178,7 +193,7 @@ class GameState extends ChangeNotifier {
       currentDeficit = 0;
     } else {
       currentDeficit = totalWheatRequired - currentWheat;
-      resources[Resources.wheat.item] = 0; // Abbiamo speso tutto il grano possibile
+      resources[Resources.wheat.item] = 0;
     }
   }
 
@@ -194,11 +209,7 @@ class GameState extends ChangeNotifier {
       troops[item] = troops[item]! - 1;
     } else if (territories.containsKey(item) && territories[item]! > 0) {
       territories[item] = territories[item]! - 1;
-      
-      // Se si distrugge un campo, eliminiamo la sua irrigazione
-      if (item == Territories.field.item && fieldIrrigation.isNotEmpty) {
-        fieldIrrigation.remove(fieldIrrigation.keys.last);
-      }
+      if (item == Territories.field.item) irrigatedfields = irrigatedfields > 0 ? irrigatedfields - 1 : 0;
     } else {
       return;
     }
@@ -258,11 +269,9 @@ class GameState extends ChangeNotifier {
 
         var territoryToRemove = ownedTerritories.last.key;
         territories[territoryToRemove] = territories[territoryToRemove]! - 1;
-
-        if (territoryToRemove == Territories.field.item && fieldIrrigation.isNotEmpty) {
-          fieldIrrigation.remove(fieldIrrigation.keys.last);
+        if (territoryToRemove == Territories.field.item) {
+          irrigatedfields = irrigatedfields > 0 ? irrigatedfields - 1 : 0;
         }
-
         int costSaved = territoryToRemove.wheatCost > 0
             ? territoryToRemove.wheatCost
             : territoryToRemove.cost;
@@ -283,15 +292,14 @@ class GameState extends ChangeNotifier {
     if (rivers > 6) rivers = 6;
     
     territories[Territories.field.item] = (territories[Territories.field.item] ?? 0) + 1;
-    int newIndex = fieldIrrigation.isNotEmpty ? fieldIrrigation.keys.last + 1 : 0;
-    fieldIrrigation[newIndex] = rivers;
+    irrigatedfields = irrigatedfields + rivers;
     notifyListeners();
   }
 
-  void addRiverWithFields(int fieldsConnected) {
+  void addRiverWithFields(int fieldsConnected, int fieldIndex) {
     if (fieldsConnected < 0) fieldsConnected = 0;
     if (fieldsConnected > 2) fieldsConnected = 2;
-
+    irrigatedfields = irrigatedfields + fieldsConnected;
     buildings[Buildings.river.item] = (buildings[Buildings.river.item] ?? 0) + 1;
     notifyListeners();
   }
@@ -310,7 +318,11 @@ class GameState extends ChangeNotifier {
           (territories[Territories.horse.item] ?? 0) - item.horseCost;
       resources[Resources.wool.item] =
           (resources[Resources.wool.item] ?? 0) - item.woolCost;
-
+      resources[Resources.rawIron.item]=
+          (resources[Resources.rawIron.item] ?? 0) - item.rawIronCost;
+      if(item.requirement!=null && item.requirement!=Buildings.road && item.requirement!=Buildings.forge && item.requirement!=Buildings.barracks) {
+        buildings[item.requirement!.item]=(buildings[item.requirement!.item]??0)-1;
+      }
       if (Troops.values.any((troop) => troop.item == item)) {
         final troop = Troops.values.firstWhere((troop) => troop.item == item);
         troops[troop.item] = (troops[troop.item] ?? 0) + 1;
@@ -335,12 +347,58 @@ class GameState extends ChangeNotifier {
   }
 
   bool canAction(GameItem item) {
+    if (item.requirement != null) {
+      int reqCount = (buildings[item.requirement!.item] ?? 0) +
+                     (territories[item.requirement!.item] ?? 0) +
+                     (troops[item.requirement!.item] ?? 0) +
+                     (boats[item.requirement!.item] ?? 0);
+                     
+      if (reqCount <= 0) return false;
+    }
+
     return (resources[Resources.wheat.item] ?? 0) >= item.wheatCost &&
         (resources[Resources.wood.item] ?? 0) >= item.woodCost &&
         (resources[Resources.stone.item] ?? 0) >= item.stoneCost &&
         (resources[Resources.iron.item] ?? 0) >= item.ironCost &&
         (territories[Territories.horse.item] ?? 0) >= item.horseCost &&
-        (resources[Resources.wool.item] ?? 0) >= item.woolCost;
+        (resources[Resources.wool.item] ?? 0) >= item.woolCost &&
+        (resources[Resources.rawIron.item] ?? 0) >= item.rawIronCost;
+  }
+
+  bool canRemove(GameItem item) {
+    Buildings? targetBuilding;
+    for (var b in Buildings.values) {
+       if (b.item == item) {
+          targetBuilding = b;
+          break;
+       }
+    }
+    if (targetBuilding == null) return true; 
+
+    int itemCurrentCount = (buildings[item] ?? 0) + (troops[item] ?? 0) + (boats[item] ?? 0) + (territories[item] ?? 0) + (resources[item] ?? 0);
+    if (itemCurrentCount > 1) return true; // Ne resterebbe almeno 1.
+
+    final allItems = [
+      ...Resources.values.map((e) => e.item),
+      ...Troops.values.map((e) => e.item),
+      ...Boats.values.map((e) => e.item),
+      ...Territories.values.map((e) => e.item),
+      ...Buildings.values.map((e) => e.item),
+    ];
+
+    for (var other in allItems) {
+       if (other.requirement == targetBuilding) {
+          bool isConsumedUpgrade = (other.requirement != Buildings.road && 
+                                    other.requirement != Buildings.forge && 
+                                    other.requirement != Buildings.barracks);
+                             
+          if (!isConsumedUpgrade) {
+              int count = (resources[other] ?? 0) + (troops[other] ?? 0) + (boats[other] ?? 0) + (territories[other] ?? 0) + (buildings[other] ?? 0);
+              if (count > 0) return false; // C'è un pezzo dipendente in gioco, non puoi distruggerlo!
+          }
+       }
+    }
+    return true;
   }
 
   void kill(GameItem item, {int amount = 1}) {
@@ -356,12 +414,8 @@ class GameState extends ChangeNotifier {
         final currentCount = map[item] ?? 0;
         final newCount = currentCount - amount;
         map[item] = newCount > 0 ? newCount : 0;
-        
-        // Se eliminiamo un campo, dobbiamo rimuovere un'irrigazione
         if (item == Territories.field.item && newCount >= 0) {
-          if (fieldIrrigation.isNotEmpty) {
-             fieldIrrigation.remove(fieldIrrigation.keys.last);
-          }
+          irrigatedfields = irrigatedfields > 0 ? irrigatedfields - 1 : 0;
         }
         break;
       }
@@ -369,19 +423,31 @@ class GameState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setWeather(bool cold) {
-    isCold = cold;
+  void setWeather(WeatherType weather) {
+    currentWeather = weather; // <-- IL BUG ERA QUI!
+    isCold = switch (weather) {
+      WeatherType.cold => true,
+      WeatherType.warm => false,
+      _ => isCold,
+    };
+    isRainy = switch (weather) {
+      WeatherType.rainy => true,
+      WeatherType.stormy => true,
+      _ => false,
+    };
     notifyListeners();
   }
 
   void reset() {
     turn = 1;
     currentDeficit = 0;
-    currentExcess = 0; 
+    currentExcess = 0;
+    isRainy = false; 
     isCold = false;
+    currentWeather = WeatherType.sunny;
     phase = TurnPhase.weather;
-    fieldIrrigation.clear();
-    
+    irrigatedfields = 0;
+  
     for (final key in resources.keys) {
       resources[key] = 0;
     }
