@@ -55,14 +55,13 @@ class _GamePageState extends State<GamePage> {
     _stagedChanges.forEach((stagedItem, count) {
       if (count > 0) {
         int conquered = _stagedConqueredAnimals[stagedItem] ?? 0;
-        game.resources[Resources.wheat.item] =
-            (game.resources[Resources.wheat.item] ?? 0) +
-            (stagedItem.turnCost.entries
-                    .singleWhere(
-                      (element) => element.key.item == Resources.wheat.item,
-                    )
-                    .value *
-                conquered);
+        
+        // Rimborso sicuro dei veri costi di costruzione (es. Lana per gli animali)
+        if (conquered > 0) {
+          for (final cost in stagedItem.constructionCost.entries) {
+            game.resources[cost.key.item] = (game.resources[cost.key.item] ?? 0) + (cost.value * conquered);
+          }
+        }
 
         for (int i = 0; i < count; i++) {
           game.action(stagedItem);
@@ -287,14 +286,10 @@ class _GamePageState extends State<GamePage> {
                       int conqueredToProcess = conqueredAnimalsCopy[item] ?? 0;
 
                       if (conqueredToProcess > 0) {
-                        game.resources[Resources.wheat.item] =
-                            (game.resources[Resources.wheat.item] ?? 0) +
-                            item.turnCost.entries
-                                .singleWhere(
-                                  (element) =>
-                                      element.key.item == Resources.wheat.item,
-                                )
-                                .value;
+                        // Rimborsa i materiali corretti usati prima di lanciare action()
+                        for (final cost in item.constructionCost.entries) {
+                          game.resources[cost.key.item] = (game.resources[cost.key.item] ?? 0) + cost.value;
+                        }
                         game.action(item);
                         conqueredAnimalsCopy[item] = conqueredToProcess - 1;
                       } else {
@@ -363,7 +358,7 @@ class _GamePageState extends State<GamePage> {
                     switch (game.phase) {
                       TurnPhase.weather =>
                         game.turn == 1 ? 'SETUP INIZIALE' : 'INIZIA TURNO',
-                      TurnPhase.gather => 'INIZIA RACCOLTA',
+                      TurnPhase.gather => 'RACCOLTA',
                       TurnPhase.payup => 'PAGA DEBITO!',
                       TurnPhase.expand => 'FINE TURNO',
                       TurnPhase.cleanup => 'SCARTA ECCESSO!',
@@ -468,20 +463,31 @@ class _GamePageState extends State<GamePage> {
   );
 
   Widget _turnSummaryBoard() {
-    int totalUpkeep = 0;
+    Map<GameItem, int> projectedCosts = {};
 
-    game.buildings.forEach(
-      (k, v) =>
-          totalUpkeep += game.getItemUpkeep(k) * (v + (_stagedChanges[k] ?? 0)),
-    );
-    game.troops.forEach(
-      (k, v) =>
-          totalUpkeep += game.getItemUpkeep(k) * (v + (_stagedChanges[k] ?? 0)),
-    );
-    game.territories.forEach(
-      (k, v) =>
-          totalUpkeep += game.getItemUpkeep(k) * (v + (_stagedChanges[k] ?? 0)),
-    );
+    // Calcolo dei costi proiettati (TEORICI TOTALI)
+    game.buildings.forEach((k, v) {
+      int count = v + (_stagedChanges[k] ?? 0);
+      for (var res in k.turnCost.entries) {
+        projectedCosts[res.key.item] = (projectedCosts[res.key.item] ?? 0) + (res.value * count);
+      }
+    });
+    
+    game.troops.forEach((k, v) {
+      int count = v + (_stagedChanges[k] ?? 0);
+      for (var res in k.turnCost.entries) {
+        int multiplier = (game.isCold && res.key.item == Resources.wheat.item) ? 2 : 1;
+        projectedCosts[res.key.item] = (projectedCosts[res.key.item] ?? 0) + (res.value * multiplier * count);
+      }
+    });
+    
+    game.territories.forEach((k, v) {
+      int count = v + (_stagedChanges[k] ?? 0);
+      // Mostriamo SEMPRE i costi richiesti dalle strutture, a prescindere che tu possa pagarli o meno
+      for (var res in k.turnCost.entries) {
+        projectedCosts[res.key.item] = (projectedCosts[res.key.item] ?? 0) + (res.value * count);
+      }
+    });
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -505,16 +511,44 @@ class _GamePageState extends State<GamePage> {
           ),
           const Divider(color: Color(0xFF4E342E), thickness: 2, height: 24),
 
-          Text(
-            'Costo Mantenimento Proiettato: $totalUpkeep Grano',
-            style: const TextStyle(
+          // Sezione Costi
+          const Text(
+            'Costi di Mantenimento Previsti:',
+            style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 16,
               color: Color(0xFFB71C1C),
             ),
           ),
+          const SizedBox(height: 12),
+          if (projectedCosts.isEmpty)
+            const Text('Nessun costo', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF3E2723))),
+          if (projectedCosts.isNotEmpty)
+            Wrap(
+              spacing: 16,
+              runSpacing: 12,
+              children: projectedCosts.entries.where((e) => e.value > 0).map((entry) {
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(entry.key.icon, style: const TextStyle(fontSize: 22)),
+                    const SizedBox(width: 6),
+                    Text(
+                      '-${entry.value}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                        color: Color(0xFFC62828),
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
+
+          // Sezione Produzione
           const Text(
             'Produzione Prevista:',
             style: TextStyle(
@@ -524,37 +558,40 @@ class _GamePageState extends State<GamePage> {
             ),
           ),
           const SizedBox(height: 12),
-
           Wrap(
             spacing: 16,
             runSpacing: 12,
             children: game.resources.keys.map((res) {
               int expectedProd = 0;
 
-              // 1. Prima calcola tutta la produzione base di ogni territorio posseduto (e di quelli in coda di costruzione)
               for (final key in game.territories.keys) {
-                int territoryCount =
-                    ((game.territories[key] ?? 0) + (_stagedChanges[key] ?? 0));
+                int territoryCount = ((game.territories[key] ?? 0) + (_stagedChanges[key] ?? 0));
+                
+                // Limita la produzione in base alla carenza di costi operativi (es. manca il legno per la Montagna)
+                int activeCount = territoryCount;
+                for (var cost in key.turnCost.entries) {
+                  if (cost.key != Resources.wheat) {
+                    int available = (game.resources[cost.key.item] ?? 0) + (_stagedChanges[cost.key.item] ?? 0);
+                    int max = available ~/ cost.value;
+                    if (max < activeCount) activeCount = max;
+                  }
+                }
+
                 for (final resource in key.gain.entries) {
-                  if (resource.key.item == res) {
-                    expectedProd += resource.value * territoryCount;
+                  if (resource.key.item == res && res!=Resources.wheat.item) {
+                    expectedProd += resource.value * activeCount; // Usa activeCount, se mancano i materiali sarà 0
                   }
                 }
               }
 
-              // 2. Alla FINE del ciclo, calcola i bonus/malus specifici del grano
               if (res == Resources.wheat.item) {
-                expectedProd += game
-                    .irrigatedfields; // Somma l'irrigazione, non moltiplicarla!
-                if (game.currentWeather == WeatherType.stormy) {
-                  expectedProd =
-                      expectedProd ~/ 2; // Applica la tempesta 1 sola volta
-                }
-              }
+                int stagedIrrigation = _stagedFieldConfigs.fold(0, (sum, val) => sum + val) + 
+                                       _stagedRiverConfigs.fold(0, (sum, val) => sum + val);
 
-              // 3. Applica eventuali raddoppi di produzione
-              if (_doubledProductionResources.contains(res)) {
-                expectedProd *= 2;
+                expectedProd += (game.irrigatedfields + stagedIrrigation) * Territories.field.item.gain[Resources.wheat]!;
+                if (game.currentWeather == WeatherType.stormy) {
+                  expectedProd = expectedProd ~/ 2; 
+                }
               }
 
               if (_doubledProductionResources.contains(res)) {
@@ -730,8 +767,9 @@ class _GamePageState extends State<GamePage> {
                           _stagedChanges[item] = stagedCount - 1;
                         }
                       } else {
-                        if (displayCount > 0)
+                        if (displayCount > 0) {
                           game.resources[item] = displayCount - 1;
+                        }
                       }
                     });
                   },
@@ -755,37 +793,6 @@ class _GamePageState extends State<GamePage> {
                       : null,
                 ),
               ] else ...[
-                InkWell(
-                  onTap: () {
-                    setState(() {
-                      game.resources[item] = (displayCount / 2).floor();
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: ShapeDecoration(
-                      color: const Color(0xFFBBDEFB),
-                      shape: BeveledRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        side: const BorderSide(
-                          color: Color(0xFF1976D2),
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                    child: const Text(
-                      '½',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 18,
-                        color: Color(0xFF0D47A1),
-                      ),
-                    ),
-                  ),
-                ),
                 IconButton(
                   iconSize: 28,
                   color: const Color(0xFF616161),
@@ -848,12 +855,10 @@ class _GamePageState extends State<GamePage> {
   Widget _interactiveCard(GameItem item, int displayCount, int stagedCount) {
     bool isExpandPhase = game.phase == TurnPhase.expand;
 
-    // Controlla se possiamo comprarlo, chiedendo dinamicamente a game_model se il costo + requirement è rispettato
     bool canAfford = isExpandPhase
         ? _simulateAndCheck((g) => g.canAction(item))
         : false;
 
-    // Controlla se possiamo eliminarlo (es. nessun altro pezzo si appoggia in modo critico a questo)
     bool canRemove = (displayCount > 0 && isExpandPhase)
         ? _simulateAndCheck((g) => g.canRemove(item))
         : false;
@@ -1003,6 +1008,10 @@ class _GamePageState extends State<GamePage> {
   ) {
     bool canReproduce = _simulateAndCheck((g) => g.canAction(item));
 
+    String costsLabel = item.constructionCost.entries
+        .map((e) => '${e.value} ${e.key.item.name}')
+        .join(', ');
+
     showDialog(
       context: context,
       builder: (context) {
@@ -1070,7 +1079,7 @@ class _GamePageState extends State<GamePage> {
                     }
                   : null,
               child: Text(
-                'Riproduci\n(-${item.turnCost.entries.singleWhere((element) => element.key.item == Resources.wheat.item).value} Grano)',
+                'Riproduci\n(-$costsLabel)', 
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: canReproduce
@@ -1142,7 +1151,7 @@ class _GamePageState extends State<GamePage> {
                     Padding(
                       padding: const EdgeInsets.only(bottom: 16),
                       child: Text(
-                        'Devi ancora ripagare ${game.currentDeficit} grano.\nScegli cosa sacrificare per pareggiare i conti:',
+                        'Devi ancora compensare un totale di ${game.currentDeficit} risorse mancanti.\nScegli cosa sacrificare per pareggiare i conti:',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),

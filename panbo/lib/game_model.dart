@@ -16,6 +16,7 @@ extension TurnPhaseLabel on TurnPhase {
     TurnPhase.cleanup => 'Pulizia',
   };
 }
+
 enum WeatherType { cold, warm, sunny, rainy, stormy }
 
 extension WeatherTypeLabel on WeatherType {
@@ -32,16 +33,22 @@ class GameItem {
   const GameItem({
     required this.name,
     required this.icon,
-    this.turnCost = const {},
+    Map<Resources, int>? turnCost, 
     this.constructionCost = const {},
     this.capacity = 0,
     this.gain = const {},
     this.reqTerritory = const {},
     this.reqBuilding= const {},
-  });
+  // ignore: prefer_initializing_formals
+  }) : _turnCost = turnCost; 
+
   final String name;
   final String icon;
-  final Map<Resources, int> turnCost;
+  
+  final Map<Resources, int>? _turnCost; 
+  
+  Map<Resources, int> get turnCost => _turnCost ?? const {Resources.wheat: 1};
+
   final Map<Resources, int> constructionCost;
   final int capacity;
   final Map<Resources, int> gain;
@@ -97,11 +104,42 @@ class GameState extends ChangeNotifier {
   int get totalCapacity {
     int cap = 0;
     buildings.forEach((item, count) => cap += item.capacity * count);
+    boats.forEach((item, count) => cap += item.capacity * count);
+    troops.forEach((item, count) => cap += item.capacity * count);
     return cap;
   }
 
   int get totalResourcesAmount {
     return resources.values.fold(0, (sum, amount) => sum + amount);
+  }
+
+  void _applyRainDamage() {
+    int openCapacity = (buildings[Buildings.storageArea.item] ?? 0) * Buildings.storageArea.item.capacity;
+    
+    int safeCapacity = totalCapacity - openCapacity;
+
+    int wheat = resources[Resources.wheat.item] ?? 0;
+    int wood = resources[Resources.wood.item] ?? 0;
+
+    int remainingSafe = safeCapacity;
+
+    int safeWheat = (wheat < remainingSafe) ? wheat : remainingSafe;
+    remainingSafe -= safeWheat;
+
+    int safeWood = (wood < remainingSafe) ? wood : remainingSafe;
+    remainingSafe -= safeWood;
+
+    int exposedWheat = wheat - safeWheat;
+    int exposedWood = wood - safeWood;
+
+    if (exposedWheat > 0 || exposedWood > 0) {
+      resources[Resources.wheat.item] = safeWheat;
+      resources[Resources.wood.item] = safeWood + (exposedWood ~/ 2); 
+      
+      if (kDebugMode) {
+        print('Pioggia! Perso $exposedWheat grano e ${exposedWood - (exposedWood ~/ 2)} legno rimasti all\'aperto.');
+      }
+    }
   }
 
   void _processCleanup() {
@@ -131,20 +169,41 @@ class GameState extends ChangeNotifier {
 
   void collectResources() {
     int wheatGain = 0;
+    
     for (final key in territories.keys) {
+      int territoryCount = territories[key] ?? 0;
+      if (territoryCount <= 0) continue;
+      int activeCount = territoryCount;
+      Map<GameItem, int> operationalCosts = {};
+      
+      for (var cost in key.turnCost.entries) {
+        if (cost.key != Resources.wheat) {
+          operationalCosts[cost.key.item] = cost.value;
+        }
+      }
+
+      if (operationalCosts.isNotEmpty) {
+        for (var opCost in operationalCosts.entries) {
+          int available = resources[opCost.key] ?? 0;
+          int maxAffordable = available ~/ opCost.value;
+          if (maxAffordable < activeCount) {
+            activeCount = maxAffordable;
+          }
+        }
+        for (var opCost in operationalCosts.entries) {
+          resources[opCost.key] = (resources[opCost.key] ?? 0) - (opCost.value * activeCount);
+        }
+      }
+
       for (final resource in key.gain.entries) {
-        if(resource.key == Resources.wheat){
-          wheatGain= wheatGain + (resource.value * (territories[key] ?? 0));
-        } else {
+        if(resource.key != Resources.wheat){
           int currentResourceAmount = resources[resource.key.item] ?? 0;
-          int territoryGain = resource.value;
-          int territoryCount = territories[key] ?? 0;
-          resources[resource.key.item] = currentResourceAmount + (territoryGain * territoryCount);
+          resources[resource.key.item] = currentResourceAmount + (resource.value * activeCount);
         }
       }
     } 
 
-    wheatGain= wheatGain + irrigatedfields;
+    wheatGain += irrigatedfields * Territories.field.item.gain[Resources.wheat]!;
     if (currentWeather == WeatherType.stormy) {
       wheatGain = wheatGain ~/ 2;
     }
@@ -153,55 +212,57 @@ class GameState extends ChangeNotifier {
   }
   
   int getItemUpkeep(GameItem item) {
-    int multiplier = isCold ? 2 : 1;
-    if(item.turnCost.containsKey(Resources.wheat)) {
-      return troops.containsKey(item)? item.turnCost.entries.singleWhere((element) => element.key == Resources.wheat).value  * multiplier: item.turnCost.entries.singleWhere((element) => element.key == Resources.wheat).value;
+    int total = 0;
+    for (var cost in item.turnCost.entries) {
+      // Il grano è l'unico costo di "sopravvivenza" che genera debito/distruzione
+      if (cost.key == Resources.wheat) {
+        int multiplier = (isCold && troops.containsKey(item) && cost.key == Resources.wheat) ? 2 : 1;
+        total += cost.value * multiplier;
+      }
     }
-    return 0;
+    return total;
   }
 
   void _processPayUp() {
-    int multiplier = isCold ? 2 : 1;
-    int totalWheatRequired = 0;
+    Map<GameItem, int> requiredResources = {};
+
+    // Calcola SOLO i costi in Grano (Sopravvivenza). I costi operativi sono già stati pagati nella Raccolta.
     for (final key in buildings.keys) {
-      for(final res in key.turnCost.entries) {
-        if(res.key == Resources.wheat){
-          totalWheatRequired += res.value * buildings[key]!;
-        }else {
-          int currentResourceAmount = resources[res.key.item] ?? 0;
-          resources[Resources.wheat.item] = currentResourceAmount - res.value * buildings[key]!;
+      for (final res in key.turnCost.entries) {
+        if (res.key == Resources.wheat) {
+          requiredResources[res.key.item] = (requiredResources[res.key.item] ?? 0) + (res.value * buildings[key]!);
         }
       }
     }
     for (final key in troops.keys) {
-      for(final res in key.turnCost.entries) {
-        if(res.key == Resources.wheat){
-          totalWheatRequired += res.value * multiplier * troops[key]!;
-        }else {
-          int currentResourceAmount = resources[res.key.item] ?? 0;
-          resources[Resources.wheat.item] = currentResourceAmount - res.value * troops[key]!;
+      for (final res in key.turnCost.entries) {
+        if (res.key == Resources.wheat) {
+          int multiplier = (isCold && res.key == Resources.wheat) ? 2 : 1;
+          requiredResources[res.key.item] = (requiredResources[res.key.item] ?? 0) + (res.value * multiplier * troops[key]!);
         }
       }
     }
     for (final key in territories.keys) {
-      for(final res in key.turnCost.entries) {
-        if(res.key == Resources.wheat){
-          totalWheatRequired += res.value * territories[key]!;
-        }else {
-          int currentResourceAmount = resources[res.key.item] ?? 0;
-          resources[Resources.wheat.item] = currentResourceAmount - res.value * territories[key]!;
+      for (final res in key.turnCost.entries) {
+        if (res.key == Resources.wheat) {
+          requiredResources[res.key.item] = (requiredResources[res.key.item] ?? 0) + (res.value * territories[key]!);
         }
       }
     }
 
-    int currentWheat = resources[Resources.wheat.item] ?? 0;
-    if (currentWheat >= totalWheatRequired) {
-      resources[Resources.wheat.item] = currentWheat - totalWheatRequired;
-      currentDeficit = 0;
-    } else {
-      currentDeficit = totalWheatRequired - currentWheat;
-      resources[Resources.wheat.item] = 0;
-    }
+    int totalMissing = 0;
+
+    requiredResources.forEach((resItem, amountRequired) {
+      int currentAmount = resources[resItem] ?? 0;
+      if (currentAmount >= amountRequired) {
+        resources[resItem] = currentAmount - amountRequired;
+      } else {
+        totalMissing += (amountRequired - currentAmount);
+        resources[resItem] = 0;
+      }
+    });
+
+    currentDeficit = totalMissing;
   }
 
   void sacrificeItem(GameItem item) {
@@ -246,51 +307,6 @@ class GameState extends ChangeNotifier {
     return list;
   }
 
-  void payUp(bool isCold) {
-    int multiplier = isCold ? 2 : 1;
-    int currentWheat = resources[Resources.wheat.item] ?? 0;
-    int totalWheatRequired = 0;
-
-    for (final key in buildings.keys) {
-      totalWheatRequired += key.turnCost.entries.singleWhere((element) => element.key == Resources.wheat).value * buildings[key]!;
-    }
-    for (final key in troops.keys) {
-      totalWheatRequired += key.turnCost.entries.singleWhere((element) => element.key == Resources.wheat).value * multiplier * troops[key]!;
-    }
-    for (final key in territories.keys) {
-      totalWheatRequired += key.turnCost.entries.singleWhere((element) => element.key == Resources.wheat).value * territories[key]!;
-    }
-    if (currentWheat >= totalWheatRequired) {
-      resources[Resources.wheat.item] = currentWheat - totalWheatRequired;
-    } else {
-      int deficit = totalWheatRequired - currentWheat;
-      resources[Resources.wheat.item] = 0; 
-      while (deficit > 0) {
-        var ownedTerritories = territories.entries
-            .where((e) => e.value > 0)
-            .toList();
-        if (ownedTerritories.isEmpty) {
-          break;
-        }
-
-        var territoryToRemove = ownedTerritories.last.key;
-        territories[territoryToRemove] = territories[territoryToRemove]! - 1;
-        if (territoryToRemove == Territories.field.item) {
-          irrigatedfields = irrigatedfields > 0 ? irrigatedfields - 1 : 0;
-        }
-        int costSaved = territoryToRemove.turnCost.entries.singleWhere((element) => element.key == Resources.wheat).value;
-        deficit -= costSaved;
-
-        if (kDebugMode) {
-          print(
-            'Deficit! Perso 1 ${territoryToRemove.name} per ripagare $costSaved grano.',
-          );
-        }
-      }
-    }
-    notifyListeners();
-  }
-
   void addFieldWithRivers(int rivers) {
     if (rivers < 0) rivers = 0;
     if (rivers > 6) rivers = 6;
@@ -317,9 +333,6 @@ class GameState extends ChangeNotifier {
       for(final ter in item.reqTerritory.entries) {
         if(ter.value) {
           territories[ter.key.item] = (territories[ter.key.item] ?? 0) - 1;
-          if(ter.key == Territories.horse && item == Troops.caravan2.item) {
-            territories[ter.key.item] = (territories[ter.key.item] ?? 0) - 1;
-          }
         }
       }
       
@@ -352,11 +365,7 @@ class GameState extends ChangeNotifier {
     for(final req in item.reqTerritory.entries) {
       if (req.value) {
         int reqCount = (territories[req.key.item] ?? 0);
-        if(req.key == Territories.horse && item == Troops.caravan2.item) {
-          if (reqCount < 2) return false;
-        } else {
-          if (reqCount < 1) return false;
-        }
+        if (reqCount < 1) return false;
       }
     }
     for(final cost in item.constructionCost.entries) {
@@ -436,6 +445,9 @@ class GameState extends ChangeNotifier {
       WeatherType.stormy => true,
       _ => false,
     };
+    if (isRainy) {
+      _applyRainDamage();
+    }
     notifyListeners();
   }
 
