@@ -32,33 +32,21 @@ class GameItem {
   const GameItem({
     required this.name,
     required this.icon,
-    this.cost = 1,
-    this.wheatCost = 0,
-    this.woodCost = 0,
-    this.stoneCost = 0,
-    this.rawIronCost=0,
-    this.ironCost = 0,
-    this.horseCost = 0,
-    this.woolCost = 0,
+    this.turnCost = const {},
+    this.constructionCost = const {},
     this.capacity = 0,
-    this.gain = 0,
-    this.territory,
-    this.requirement,
+    this.gain = const {},
+    this.reqTerritory = const {},
+    this.reqBuilding= const {},
   });
   final String name;
   final String icon;
-  final int cost;
-  final int wheatCost;
-  final int woodCost;
-  final int stoneCost;
-  final int ironCost;
-  final int rawIronCost;
-  final int horseCost;
-  final int woolCost;
+  final Map<Resources, int> turnCost;
+  final Map<Resources, int> constructionCost;
   final int capacity;
-  final int gain;
-  final Territories? territory;
-  final Buildings? requirement;
+  final Map<Resources, int> gain;
+  final Map<Territories, bool> reqTerritory;
+  final Map<Buildings, bool> reqBuilding;
 }
 
 class GameState extends ChangeNotifier {
@@ -142,49 +130,68 @@ class GameState extends ChangeNotifier {
   }
 
   void collectResources() {
-    // 1. Calcola la produzione del grano
-    int wheatGain = Territories.field.item.gain * irrigatedfields;
-    
-    // 2. Se c'è un temporale, la PRODUZIONE viene dimezzata (usando la divisione intera '~/')
+    int wheatGain = 0;
+    for (final key in territories.keys) {
+      for (final resource in key.gain.entries) {
+        if(resource.key == Resources.wheat){
+          wheatGain= wheatGain + (resource.value * (territories[key] ?? 0));
+        } else {
+          int currentResourceAmount = resources[resource.key.item] ?? 0;
+          int territoryGain = resource.value;
+          int territoryCount = territories[key] ?? 0;
+          resources[resource.key.item] = currentResourceAmount + (territoryGain * territoryCount);
+        }
+      }
+    } 
+
+    wheatGain= wheatGain + irrigatedfields;
     if (currentWeather == WeatherType.stormy) {
       wheatGain = wheatGain ~/ 2;
     }
-    
     resources[Resources.wheat.item] = (resources[Resources.wheat.item] ?? 0) + wheatGain;
-
-    for (final key in resources.keys) {
-      if (key.territory != null && key != Resources.wheat.item) {
-        int currentResourceAmount = resources[key] ?? 0;
-        int territoryGain = key.territory!.item.gain;
-        int territoryCount = territories[key.territory!.item] ?? 0;
-
-        resources[key] = currentResourceAmount + (territoryGain * territoryCount);
-      }
-    }
     notifyListeners();
   }
-
+  
   int getItemUpkeep(GameItem item) {
     int multiplier = isCold ? 2 : 1;
-    if (buildings.containsKey(item)) return item.cost;
-    if (troops.containsKey(item)) return item.cost * multiplier;
-    if (territories.containsKey(item)) {
-      return item.wheatCost > 0 ? item.wheatCost : item.cost;
+    if(item.turnCost.containsKey(Resources.wheat)) {
+      return troops.containsKey(item)? item.turnCost.entries.singleWhere((element) => element.key == Resources.wheat).value  * multiplier: item.turnCost.entries.singleWhere((element) => element.key == Resources.wheat).value;
     }
     return 0;
   }
 
   void _processPayUp() {
+    int multiplier = isCold ? 2 : 1;
     int totalWheatRequired = 0;
-
     for (final key in buildings.keys) {
-      totalWheatRequired += getItemUpkeep(key) * buildings[key]!;
+      for(final res in key.turnCost.entries) {
+        if(res.key == Resources.wheat){
+          totalWheatRequired += res.value * buildings[key]!;
+        }else {
+          int currentResourceAmount = resources[res.key.item] ?? 0;
+          resources[Resources.wheat.item] = currentResourceAmount - res.value * buildings[key]!;
+        }
+      }
     }
     for (final key in troops.keys) {
-      totalWheatRequired += getItemUpkeep(key) * troops[key]!;
+      for(final res in key.turnCost.entries) {
+        if(res.key == Resources.wheat){
+          totalWheatRequired += res.value * multiplier * troops[key]!;
+        }else {
+          int currentResourceAmount = resources[res.key.item] ?? 0;
+          resources[Resources.wheat.item] = currentResourceAmount - res.value * troops[key]!;
+        }
+      }
     }
     for (final key in territories.keys) {
-      totalWheatRequired += getItemUpkeep(key) * territories[key]!;
+      for(final res in key.turnCost.entries) {
+        if(res.key == Resources.wheat){
+          totalWheatRequired += res.value * territories[key]!;
+        }else {
+          int currentResourceAmount = resources[res.key.item] ?? 0;
+          resources[Resources.wheat.item] = currentResourceAmount - res.value * territories[key]!;
+        }
+      }
     }
 
     int currentWheat = resources[Resources.wheat.item] ?? 0;
@@ -245,14 +252,13 @@ class GameState extends ChangeNotifier {
     int totalWheatRequired = 0;
 
     for (final key in buildings.keys) {
-      totalWheatRequired += key.cost * buildings[key]!;
+      totalWheatRequired += key.turnCost.entries.singleWhere((element) => element.key == Resources.wheat).value * buildings[key]!;
     }
     for (final key in troops.keys) {
-      totalWheatRequired += key.cost * multiplier * troops[key]!;
+      totalWheatRequired += key.turnCost.entries.singleWhere((element) => element.key == Resources.wheat).value * multiplier * troops[key]!;
     }
     for (final key in territories.keys) {
-      int terrCost = key.wheatCost > 0 ? key.wheatCost : key.cost;
-      totalWheatRequired += terrCost * territories[key]!;
+      totalWheatRequired += key.turnCost.entries.singleWhere((element) => element.key == Resources.wheat).value * territories[key]!;
     }
     if (currentWheat >= totalWheatRequired) {
       resources[Resources.wheat.item] = currentWheat - totalWheatRequired;
@@ -272,9 +278,7 @@ class GameState extends ChangeNotifier {
         if (territoryToRemove == Territories.field.item) {
           irrigatedfields = irrigatedfields > 0 ? irrigatedfields - 1 : 0;
         }
-        int costSaved = territoryToRemove.wheatCost > 0
-            ? territoryToRemove.wheatCost
-            : territoryToRemove.cost;
+        int costSaved = territoryToRemove.turnCost.entries.singleWhere((element) => element.key == Resources.wheat).value;
         deficit -= costSaved;
 
         if (kDebugMode) {
@@ -306,63 +310,60 @@ class GameState extends ChangeNotifier {
 
   void action(GameItem item) {
     if (canAction(item)) {
-      resources[Resources.wheat.item] =
-          (resources[Resources.wheat.item] ?? 0) - item.wheatCost;
-      resources[Resources.wood.item] =
-          (resources[Resources.wood.item] ?? 0) - item.woodCost;
-      resources[Resources.stone.item] =
-          (resources[Resources.stone.item] ?? 0) - item.stoneCost;
-      resources[Resources.iron.item] =
-          (resources[Resources.iron.item] ?? 0) - item.ironCost;
-      territories[Territories.horse.item] =
-          (territories[Territories.horse.item] ?? 0) - item.horseCost;
-      resources[Resources.wool.item] =
-          (resources[Resources.wool.item] ?? 0) - item.woolCost;
-      resources[Resources.rawIron.item]=
-          (resources[Resources.rawIron.item] ?? 0) - item.rawIronCost;
-      if(item.requirement!=null && item.requirement!=Buildings.road && item.requirement!=Buildings.forge && item.requirement!=Buildings.barracks) {
-        buildings[item.requirement!.item]=(buildings[item.requirement!.item]??0)-1;
+      for(final cost in item.constructionCost.entries) {
+        resources[cost.key.item] = (resources[cost.key.item] ?? 0) - cost.value;
       }
+      
+      for(final ter in item.reqTerritory.entries) {
+        if(ter.value) {
+          territories[ter.key.item] = (territories[ter.key.item] ?? 0) - 1;
+          if(ter.key == Territories.horse && item == Troops.caravan2.item) {
+            territories[ter.key.item] = (territories[ter.key.item] ?? 0) - 1;
+          }
+        }
+      }
+      
+      for(final build in item.reqBuilding.entries) {
+        if(build.value) {
+          buildings[build.key.item] = (buildings[build.key.item] ?? 0) - 1;
+        }
+      }
+      
       if (Troops.values.any((troop) => troop.item == item)) {
-        final troop = Troops.values.firstWhere((troop) => troop.item == item);
-        troops[troop.item] = (troops[troop.item] ?? 0) + 1;
+        troops[item] = (troops[item] ?? 0) + 1;
       } else if (Buildings.values.any((building) => building.item == item)) {
-        final building = Buildings.values.firstWhere(
-          (building) => building.item == item,
-        );
-        buildings[building.item] = (buildings[building.item] ?? 0) + 1;
+        buildings[item] = (buildings[item] ?? 0) + 1;
       } else if (Boats.values.any((boat) => boat.item == item)) {
-        final boat = Boats.values.firstWhere((boat) => boat.item == item);
-        boats[boat.item] = (boats[boat.item] ?? 0) + 1;
-      } else if (Territories.values.any(
-        (territory) => territory.item == item,
-      )) {
-        final territory = Territories.values.firstWhere(
-          (territory) => territory.item == item,
-        );
-        territories[territory.item] = (territories[territory.item] ?? 0) + 1;
+        boats[item] = (boats[item] ?? 0) + 1;
+      } else if (Territories.values.any((territory) => territory.item == item)) {
+        territories[item] = (territories[item] ?? 0) + 1;
       }
       notifyListeners();
     }
   }
 
   bool canAction(GameItem item) {
-    if (item.requirement != null) {
-      int reqCount = (buildings[item.requirement!.item] ?? 0) +
-                     (territories[item.requirement!.item] ?? 0) +
-                     (troops[item.requirement!.item] ?? 0) +
-                     (boats[item.requirement!.item] ?? 0);
-                     
-      if (reqCount <= 0) return false;
+    for(final req in item.reqBuilding.entries) {
+      if (req.value) {
+        int reqCount = (buildings[req.key.item] ?? 0);     
+        if (reqCount < 1) return false;
+      }
     }
-
-    return (resources[Resources.wheat.item] ?? 0) >= item.wheatCost &&
-        (resources[Resources.wood.item] ?? 0) >= item.woodCost &&
-        (resources[Resources.stone.item] ?? 0) >= item.stoneCost &&
-        (resources[Resources.iron.item] ?? 0) >= item.ironCost &&
-        (territories[Territories.horse.item] ?? 0) >= item.horseCost &&
-        (resources[Resources.wool.item] ?? 0) >= item.woolCost &&
-        (resources[Resources.rawIron.item] ?? 0) >= item.rawIronCost;
+    for(final req in item.reqTerritory.entries) {
+      if (req.value) {
+        int reqCount = (territories[req.key.item] ?? 0);
+        if(req.key == Territories.horse && item == Troops.caravan2.item) {
+          if (reqCount < 2) return false;
+        } else {
+          if (reqCount < 1) return false;
+        }
+      }
+    }
+    for(final cost in item.constructionCost.entries) {
+      int resCount = (resources[cost.key.item] ?? 0);
+      if (resCount < cost.value) return false;
+    }
+    return true;
   }
 
   bool canRemove(GameItem item) {
@@ -387,10 +388,10 @@ class GameState extends ChangeNotifier {
     ];
 
     for (var other in allItems) {
-       if (other.requirement == targetBuilding) {
-          bool isConsumedUpgrade = (other.requirement != Buildings.road && 
-                                    other.requirement != Buildings.forge && 
-                                    other.requirement != Buildings.barracks);
+       if (other.reqBuilding == targetBuilding) {
+          bool isConsumedUpgrade = (other.reqBuilding != Buildings.road && 
+                                    other.reqBuilding != Buildings.forge && 
+                                    other.reqBuilding != Buildings.barracks);
                              
           if (!isConsumedUpgrade) {
               int count = (resources[other] ?? 0) + (troops[other] ?? 0) + (boats[other] ?? 0) + (territories[other] ?? 0) + (buildings[other] ?? 0);
@@ -424,7 +425,7 @@ class GameState extends ChangeNotifier {
   }
 
   void setWeather(WeatherType weather) {
-    currentWeather = weather; // <-- IL BUG ERA QUI!
+    currentWeather = weather;
     isCold = switch (weather) {
       WeatherType.cold => true,
       WeatherType.warm => false,

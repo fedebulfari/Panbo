@@ -1,20 +1,22 @@
+import 'package:panbo/resources.dart';
+
 import 'game_model.dart';
 
 enum Buildings {
-  arsenal(GameItem(name: 'Arsenale',icon: '🏰',woodCost: 10,stoneCost: 10, ironCost: 1,capacity: 250, requirement: warehouse)),
-  barracks(GameItem(name: 'Caserma', icon: '🛡️', woodCost: 10, stoneCost: 10)),
-  bifurcation(GameItem(name: 'Bivio', icon: '🛣️', stoneCost: 5, requirement: road)),
-  bridge(GameItem(name: 'Ponte', icon: '🌉', stoneCost: 5)),
-  cityWall(GameItem(name: 'Mura della Città', icon: '城墙', stoneCost: 20, ironCost: 2, requirement: wall)),
-  forge(GameItem(name: 'Forgia', icon: '⚒️', stoneCost: 50)),
-  harbor(GameItem(name: 'Porto', icon: '⚓', woodCost: 30)),
-  river(GameItem(name: 'Fiume', icon: '🌊', woodCost: 10, stoneCost: 5)),
-  road(GameItem(name: 'Strada', icon: '🛣️', stoneCost: 10)),
-  storageArea( GameItem(name: 'Magazzini all\'aperto', icon: '🏗️', capacity: 10)),
-  temple(GameItem(name: 'Tempio', icon: '⛪', stoneCost: 50)),
-  wall(GameItem(name: 'Muro', icon: '🧱', stoneCost: 15)),
-  warehouse(GameItem(name: 'Magazzino',icon: '🏭',woodCost: 10,stoneCost: 10,capacity: 50)),
-  wharf(GameItem(name: 'Molo', icon: '🛳️', woodCost: 10));
+  arsenal(GameItem(name: 'Arsenale',icon: '🏰',constructionCost:{Resources.wood:10, Resources.stone:10, Resources.iron:1}, capacity: 250, reqBuilding:{warehouse: true})),
+  barracks(GameItem(name: 'Caserma', icon: '🛡️', constructionCost:{Resources.wood:10, Resources.stone:10})),
+  bifurcation(GameItem(name: 'Bivio', icon: '🛣️', constructionCost:{Resources.stone:5}, reqBuilding:{road: true})),
+  bridge(GameItem(name: 'Ponte', icon: '🌉', constructionCost:{Resources.stone:5})),
+  cityWall(GameItem(name: 'Mura della Città', icon: '城墙', constructionCost:{Resources.stone:20, Resources.iron:2}, reqBuilding:{wall: true})),
+  forge(GameItem(name: 'Forgia', icon: '⚒️', constructionCost:{Resources.stone:50})),
+  harbor(GameItem(name: 'Porto', icon: '⚓', constructionCost:{Resources.wood:30})),
+  river(GameItem(name: 'Fiume', icon: '🌊', constructionCost:{Resources.wood:10, Resources.stone:5})),
+  road(GameItem(name: 'Strada', icon: '🛣️', constructionCost:{Resources.stone:10})),
+  storageArea( GameItem(name: 'Magazzini all\'aperto', icon: '📦', capacity: 10)),
+  temple(GameItem(name: 'Tempio', icon: '⛪', constructionCost:{Resources.stone:50})),
+  wall(GameItem(name: 'Muro', icon: '🧱', constructionCost:{Resources.stone:15})),
+  warehouse(GameItem(name: 'Magazzino',icon: '🏭',constructionCost:{Resources.wood:10,Resources.stone:10},capacity: 50)),
+  wharf(GameItem(name: 'Molo', icon: '🛳️', constructionCost:{Resources.wood:10},reqBuilding:{harbor: false}));
 
   final GameItem item;
 

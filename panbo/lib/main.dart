@@ -14,16 +14,16 @@ class PanboApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        debugShowCheckedModeBanner: false,
-        title: 'Panbo',
-        theme: ThemeData(
-          scaffoldBackgroundColor: const Color(0xFFF3E5AB),
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF5D4037)),
-          useMaterial3: true,
-          fontFamily: 'Courier', 
-        ),
-        home: const GamePage(),
-      );
+    debugShowCheckedModeBanner: false,
+    title: 'Panbo',
+    theme: ThemeData(
+      scaffoldBackgroundColor: const Color(0xFFF3E5AB),
+      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF5D4037)),
+      useMaterial3: true,
+      fontFamily: 'Courier',
+    ),
+    home: const GamePage(),
+  );
 }
 
 class GamePage extends StatefulWidget {
@@ -34,14 +34,14 @@ class GamePage extends StatefulWidget {
 
 class _GamePageState extends State<GamePage> {
   final game = GameState();
-  
+
   int _currentIndex = 0;
   final Set<GameItem> _doubledProductionResources = {};
-  
+
   final Map<GameItem, int> _stagedChanges = {};
   final List<int> _stagedFieldConfigs = [];
   final List<int> _stagedRiverConfigs = [];
-  final Map<GameItem, int> _stagedConqueredAnimals = {}; 
+  final Map<GameItem, int> _stagedConqueredAnimals = {};
 
   // Funzione Suprema: Simula il carrello in tempo reale e interroga game_model.dart
   bool _simulateAndCheck(bool Function(GameState) checkFn) {
@@ -55,7 +55,14 @@ class _GamePageState extends State<GamePage> {
     _stagedChanges.forEach((stagedItem, count) {
       if (count > 0) {
         int conquered = _stagedConqueredAnimals[stagedItem] ?? 0;
-        game.resources[Resources.wheat.item] = (game.resources[Resources.wheat.item] ?? 0) + (stagedItem.wheatCost * conquered);
+        game.resources[Resources.wheat.item] =
+            (game.resources[Resources.wheat.item] ?? 0) +
+            (stagedItem.turnCost.entries
+                    .singleWhere(
+                      (element) => element.key.item == Resources.wheat.item,
+                    )
+                    .value *
+                conquered);
 
         for (int i = 0; i < count; i++) {
           game.action(stagedItem);
@@ -66,7 +73,8 @@ class _GamePageState extends State<GamePage> {
         }
       } else if (count < 0) {
         if (Resources.values.any((r) => r.item == stagedItem)) {
-          game.resources[stagedItem] = (game.resources[stagedItem] ?? 0) - (-count);
+          game.resources[stagedItem] =
+              (game.resources[stagedItem] ?? 0) - (-count);
         } else {
           game.kill(stagedItem, amount: -count);
         }
@@ -75,11 +83,16 @@ class _GamePageState extends State<GamePage> {
 
     bool result = checkFn(game);
 
-    game.resources.clear(); game.resources.addAll(backupResources);
-    game.buildings.clear(); game.buildings.addAll(backupBuildings);
-    game.territories.clear(); game.territories.addAll(backupTerritories);
-    game.troops.clear(); game.troops.addAll(backupTroops);
-    game.boats.clear(); game.boats.addAll(backupBoats);
+    game.resources.clear();
+    game.resources.addAll(backupResources);
+    game.buildings.clear();
+    game.buildings.addAll(backupBuildings);
+    game.territories.clear();
+    game.territories.addAll(backupTerritories);
+    game.troops.clear();
+    game.troops.addAll(backupTroops);
+    game.boats.clear();
+    game.boats.addAll(backupBoats);
     game.irrigatedfields = backupIrrigated;
 
     return result;
@@ -87,18 +100,24 @@ class _GamePageState extends State<GamePage> {
 
   @override
   Widget build(BuildContext context) {
-    final resources = Resources.values.map((resource) => resource.item).toList();
+    final resources = Resources.values
+        .map((resource) => resource.item)
+        .toList();
     final troops = Troops.values.map((troop) => troop.item).toList();
     final boats = Boats.values.map((boat) => boat.item).toList();
-    final territories = Territories.values.map((territory) => territory.item).toList();
-    final buildings = Buildings.values.map((building) => building.item).toList();
+    final territories = Territories.values
+        .map((territory) => territory.item)
+        .toList();
+    final buildings = Buildings.values
+        .map((building) => building.item)
+        .toList();
 
     return ListenableBuilder(
       listenable: game,
       builder: (context, child) {
         return Scaffold(
           appBar: AppBar(
-            backgroundColor: const Color(0xFFE7D0A7), 
+            backgroundColor: const Color(0xFFE7D0A7),
             elevation: 4,
             shadowColor: Colors.black45,
             centerTitle: true,
@@ -139,7 +158,7 @@ class _GamePageState extends State<GamePage> {
                 children: [
                   _turnHeader(),
                   const SizedBox(height: 16),
-                  
+
                   _turnSummaryBoard(),
                   const SizedBox(height: 24),
 
@@ -191,13 +210,22 @@ class _GamePageState extends State<GamePage> {
             },
             destinations: const [
               NavigationDestination(
-                icon: Icon(Icons.inventory_2_outlined, color: Color(0xFF4E342E)),
+                icon: Icon(
+                  Icons.inventory_2_outlined,
+                  color: Color(0xFF4E342E),
+                ),
                 selectedIcon: Icon(Icons.inventory_2, color: Color(0xFF3E2723)),
                 label: 'Risorse',
               ),
               NavigationDestination(
-                icon: Icon(Icons.account_balance_outlined, color: Color(0xFF4E342E)),
-                selectedIcon: Icon(Icons.account_balance, color: Color(0xFF3E2723)),
+                icon: Icon(
+                  Icons.account_balance_outlined,
+                  color: Color(0xFF4E342E),
+                ),
+                selectedIcon: Icon(
+                  Icons.account_balance,
+                  color: Color(0xFF3E2723),
+                ),
                 label: 'Espansioni',
               ),
               NavigationDestination(
@@ -218,29 +246,28 @@ class _GamePageState extends State<GamePage> {
                 }
               } else if (game.phase == TurnPhase.gather) {
                 final beforeGather = Map<GameItem, int>.from(game.resources);
-                
+
                 game.collectResources();
-                
+
                 for (var item in _doubledProductionResources) {
                   final amountBefore = beforeGather[item] ?? 0;
                   final amountAfter = game.resources[item] ?? 0;
                   final producedAmount = amountAfter - amountBefore;
-                  
+
                   if (producedAmount > 0) {
                     game.resources[item] = amountAfter + producedAmount;
                   }
                 }
-                
+
                 setState(() {
                   _doubledProductionResources.clear();
                 });
-                
+
                 game.nextPhase();
-                
+
                 if (game.phase == TurnPhase.payup && !game.hasDeficit) {
                   game.nextPhase();
                 }
-                
               } else if (game.phase == TurnPhase.payup) {
                 if (game.hasDeficit) {
                   _showDeficitDialog(context);
@@ -248,7 +275,9 @@ class _GamePageState extends State<GamePage> {
                   game.nextPhase();
                 }
               } else if (game.phase == TurnPhase.expand) {
-                Map<GameItem, int> conqueredAnimalsCopy = Map.from(_stagedConqueredAnimals);
+                Map<GameItem, int> conqueredAnimalsCopy = Map.from(
+                  _stagedConqueredAnimals,
+                );
 
                 _stagedChanges.forEach((item, count) {
                   if (count > 0) {
@@ -256,45 +285,59 @@ class _GamePageState extends State<GamePage> {
                     int riverIdx = 0;
                     for (int i = 0; i < count; i++) {
                       int conqueredToProcess = conqueredAnimalsCopy[item] ?? 0;
-                      
+
                       if (conqueredToProcess > 0) {
-                         game.resources[Resources.wheat.item] = (game.resources[Resources.wheat.item] ?? 0) + item.wheatCost;
-                         game.action(item);
-                         conqueredAnimalsCopy[item] = conqueredToProcess - 1;
+                        game.resources[Resources.wheat.item] =
+                            (game.resources[Resources.wheat.item] ?? 0) +
+                            item.turnCost.entries
+                                .singleWhere(
+                                  (element) =>
+                                      element.key.item == Resources.wheat.item,
+                                )
+                                .value;
+                        game.action(item);
+                        conqueredAnimalsCopy[item] = conqueredToProcess - 1;
                       } else {
-                         game.action(item);
+                        game.action(item);
                       }
-                      
+
                       if (Resources.values.any((r) => r.item == item)) {
                         game.resources[item] = (game.resources[item] ?? 0) + 1;
                       }
 
-                      if (item == Territories.field.item && fieldIdx < _stagedFieldConfigs.length) {
-                        game.addFieldWithRivers(_stagedFieldConfigs[fieldIdx++]);
-                      } else if (item == Buildings.river.item && riverIdx < _stagedRiverConfigs.length) {
-                        game.addRiverWithFields(_stagedRiverConfigs[riverIdx++], 1);
+                      if (item == Territories.field.item &&
+                          fieldIdx < _stagedFieldConfigs.length) {
+                        game.addFieldWithRivers(
+                          _stagedFieldConfigs[fieldIdx++],
+                        );
+                      } else if (item == Buildings.river.item &&
+                          riverIdx < _stagedRiverConfigs.length) {
+                        game.addRiverWithFields(
+                          _stagedRiverConfigs[riverIdx++],
+                          1,
+                        );
                       }
                     }
                   } else if (count < 0) {
                     if (Resources.values.any((r) => r.item == item)) {
-                      game.resources[item] = (game.resources[item] ?? 0) - (-count);
+                      game.resources[item] =
+                          (game.resources[item] ?? 0) - (-count);
                     } else {
                       game.kill(item, amount: -count);
                     }
                   }
                 });
-                
+
                 _stagedChanges.clear();
                 _stagedFieldConfigs.clear();
                 _stagedRiverConfigs.clear();
                 _stagedConqueredAnimals.clear();
-                
+
                 game.nextPhase();
-                
+
                 if (game.phase == TurnPhase.cleanup && !game.hasExcess) {
                   game.nextPhase();
                 }
-                
               } else if (game.phase == TurnPhase.cleanup) {
                 if (game.hasExcess) {
                   _showCleanupDialog(context);
@@ -308,8 +351,8 @@ class _GamePageState extends State<GamePage> {
               decoration: _boardGameDecoration(
                 ((game.phase == TurnPhase.payup && game.hasDeficit) ||
                         (game.phase == TurnPhase.cleanup && game.hasExcess))
-                    ? const Color(0xFFEF9A9A) 
-                    : const Color(0xFFA5D6A7), 
+                    ? const Color(0xFFEF9A9A)
+                    : const Color(0xFFA5D6A7),
                 isInteractive: true,
               ),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -318,10 +361,11 @@ class _GamePageState extends State<GamePage> {
                 children: [
                   Text(
                     switch (game.phase) {
-                      TurnPhase.weather => game.turn == 1 ? 'SETUP INIZIALE' : 'INIZIA TURNO',
+                      TurnPhase.weather =>
+                        game.turn == 1 ? 'SETUP INIZIALE' : 'INIZIA TURNO',
                       TurnPhase.gather => 'INIZIA RACCOLTA',
                       TurnPhase.payup => 'PAGA DEBITO!',
-                      TurnPhase.expand => 'FINE TURNO', 
+                      TurnPhase.expand => 'FINE TURNO',
                       TurnPhase.cleanup => 'SCARTA ECCESSO!',
                     },
                     style: const TextStyle(
@@ -352,7 +396,7 @@ class _GamePageState extends State<GamePage> {
     return ShapeDecoration(
       color: color,
       shape: BeveledRectangleBorder(
-        borderRadius: BorderRadius.circular(16), 
+        borderRadius: BorderRadius.circular(16),
         side: const BorderSide(color: Color(0xFF4E342E), width: 2),
       ),
       shadows: [
@@ -372,65 +416,76 @@ class _GamePageState extends State<GamePage> {
   }
 
   Widget _turnHeader() => Container(
-        decoration: _boardGameDecoration(const Color(0xFFFFCC80)),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: const ShapeDecoration(
-                shape: CircleBorder(side: BorderSide(color: Color(0xFF4E342E), width: 2)),
-                color: Colors.white,
-              ),
-              child: Icon(
-                game.isCold ? Icons.ac_unit : Icons.wb_sunny,
-                color: game.isCold ? Colors.blue : Colors.red,
-                size: 28,
-              ),
+    decoration: _boardGameDecoration(const Color(0xFFFFCC80)),
+    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+    child: Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: const ShapeDecoration(
+            shape: CircleBorder(
+              side: BorderSide(color: Color(0xFF4E342E), width: 2),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                'TURNO ${game.turn}',
-                style: const TextStyle(
-                  color: Color(0xFF3E2723),
-                  fontSize: 26,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 2,
-                ),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: ShapeDecoration(
-                color: Colors.white,
-                shape: BeveledRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: const BorderSide(color: Color(0xFF4E342E), width: 2),
-                ),
-              ),
-              child: Text(
-                game.phase.label.toUpperCase(),
-                style: const TextStyle(
-                  color: Color(0xFF3E2723),
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
-          ],
+            color: Colors.white,
+          ),
+          child: Icon(
+            game.isCold ? Icons.ac_unit : Icons.wb_sunny,
+            color: game.isCold ? Colors.blue : Colors.red,
+            size: 28,
+          ),
         ),
-      );
+        const SizedBox(width: 16),
+        Expanded(
+          child: Text(
+            'TURNO ${game.turn}',
+            style: const TextStyle(
+              color: Color(0xFF3E2723),
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 2,
+            ),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: ShapeDecoration(
+            color: Colors.white,
+            shape: BeveledRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: const BorderSide(color: Color(0xFF4E342E), width: 2),
+            ),
+          ),
+          child: Text(
+            game.phase.label.toUpperCase(),
+            style: const TextStyle(
+              color: Color(0xFF3E2723),
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _turnSummaryBoard() {
     int totalUpkeep = 0;
-    
-    game.buildings.forEach((k, v) => totalUpkeep += game.getItemUpkeep(k) * (v + (_stagedChanges[k] ?? 0)));
-    game.troops.forEach((k, v) => totalUpkeep += game.getItemUpkeep(k) * (v + (_stagedChanges[k] ?? 0)));
-    game.territories.forEach((k, v) => totalUpkeep += game.getItemUpkeep(k) * (v + (_stagedChanges[k] ?? 0)));
+
+    game.buildings.forEach(
+      (k, v) =>
+          totalUpkeep += game.getItemUpkeep(k) * (v + (_stagedChanges[k] ?? 0)),
+    );
+    game.troops.forEach(
+      (k, v) =>
+          totalUpkeep += game.getItemUpkeep(k) * (v + (_stagedChanges[k] ?? 0)),
+    );
+    game.territories.forEach(
+      (k, v) =>
+          totalUpkeep += game.getItemUpkeep(k) * (v + (_stagedChanges[k] ?? 0)),
+    );
 
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: _boardGameDecoration(const Color(0xFFBCAAA4)), 
+      decoration: _boardGameDecoration(const Color(0xFFBCAAA4)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -440,12 +495,16 @@ class _GamePageState extends State<GamePage> {
               SizedBox(width: 8),
               Text(
                 'RIEPILOGO TURNO',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Color(0xFF3E2723)),
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 18,
+                  color: Color(0xFF3E2723),
+                ),
               ),
             ],
           ),
           const Divider(color: Color(0xFF4E342E), thickness: 2, height: 24),
-          
+
           Text(
             'Costo Mantenimento Proiettato: $totalUpkeep Grano',
             style: const TextStyle(
@@ -454,43 +513,54 @@ class _GamePageState extends State<GamePage> {
               color: Color(0xFFB71C1C),
             ),
           ),
-          
+
           const SizedBox(height: 16),
           const Text(
             'Produzione Prevista:',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF3E2723)),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: Color(0xFF3E2723),
+            ),
           ),
           const SizedBox(height: 12),
-          
+
           Wrap(
             spacing: 16,
             runSpacing: 12,
             children: game.resources.keys.map((res) {
               int expectedProd = 0;
-              
+
+              // 1. Prima calcola tutta la produzione base di ogni territorio posseduto (e di quelli in coda di costruzione)
+              for (final key in game.territories.keys) {
+                int territoryCount =
+                    ((game.territories[key] ?? 0) + (_stagedChanges[key] ?? 0));
+                for (final resource in key.gain.entries) {
+                  if (resource.key.item == res) {
+                    expectedProd += resource.value * territoryCount;
+                  }
+                }
+              }
+
+              // 2. Alla FINE del ciclo, calcola i bonus/malus specifici del grano
               if (res == Resources.wheat.item) {
-                int projectedFields = game.irrigatedfields;
-                for (int rivers in _stagedFieldConfigs) {
-                  projectedFields += rivers;
-                }
-                for (int fields in _stagedRiverConfigs) {
-                  projectedFields += fields;
-                }
-                expectedProd = Territories.field.item.gain * projectedFields;
-                
+                expectedProd += game
+                    .irrigatedfields; // Somma l'irrigazione, non moltiplicarla!
                 if (game.currentWeather == WeatherType.stormy) {
-                   expectedProd = expectedProd ~/ 2;
+                  expectedProd =
+                      expectedProd ~/ 2; // Applica la tempesta 1 sola volta
                 }
-              } else if (res.territory != null) {
-                int territoryGain = res.territory!.item.gain;
-                int territoryCount = (game.territories[res.territory!.item] ?? 0) + (_stagedChanges[res.territory!.item] ?? 0);
-                expectedProd = territoryGain * territoryCount;
+              }
+
+              // 3. Applica eventuali raddoppi di produzione
+              if (_doubledProductionResources.contains(res)) {
+                expectedProd *= 2;
               }
 
               if (_doubledProductionResources.contains(res)) {
                 expectedProd *= 2;
               }
-              
+
               return Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -501,7 +571,9 @@ class _GamePageState extends State<GamePage> {
                     style: TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 18,
-                      color: expectedProd > 0 ? const Color(0xFF1B5E20) : const Color(0xFF3E2723),
+                      color: expectedProd > 0
+                          ? const Color(0xFF1B5E20)
+                          : const Color(0xFF3E2723),
                     ),
                   ),
                 ],
@@ -514,74 +586,87 @@ class _GamePageState extends State<GamePage> {
   }
 
   Widget _section(String title, IconData icon, Widget child) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12, left: 8),
-            child: Row(
-              children: [
-                Icon(icon, size: 24, color: const Color(0xFF5D4037)),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 22, 
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF4E342E),
-                    letterSpacing: 1.2
-                  ),
-                ),
-              ],
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Padding(
+        padding: const EdgeInsets.only(bottom: 12, left: 8),
+        child: Row(
+          children: [
+            Icon(icon, size: 24, color: const Color(0xFF5D4037)),
+            const SizedBox(width: 8),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF4E342E),
+                letterSpacing: 1.2,
+              ),
             ),
-          ),
-          child,
-        ],
-      );
+          ],
+        ),
+      ),
+      child,
+    ],
+  );
 
   Widget _resourceGrid(List<GameItem> items) => GridView.extent(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        maxCrossAxisExtent: 350, 
-        childAspectRatio: 1.8, 
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        children: items.map((item) {
-          int baseCount = game.resources[item] ?? 0;
-          int stagedCount = _stagedChanges[item] ?? 0;
-          return _resourceCard(item, baseCount + stagedCount, stagedCount);
-        }).toList(),
-      );
+    shrinkWrap: true,
+    physics: const NeverScrollableScrollPhysics(),
+    maxCrossAxisExtent: 350,
+    childAspectRatio: 1.8,
+    crossAxisSpacing: 12,
+    mainAxisSpacing: 12,
+    children: items.map((item) {
+      int baseCount = game.resources[item] ?? 0;
+      int stagedCount = _stagedChanges[item] ?? 0;
+      return _resourceCard(item, baseCount + stagedCount, stagedCount);
+    }).toList(),
+  );
 
   Widget _interactiveGrid(List<GameItem> items) => GridView.extent(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        maxCrossAxisExtent: 350,
-        childAspectRatio: 3.5, 
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        children: items.map((item) {
-          int baseCount = game.troops[item] ?? game.territories[item] ?? game.buildings[item] ?? game.boats[item] ?? 0;
-          int stagedCount = _stagedChanges[item] ?? 0;
-          return _interactiveCard(item, baseCount + stagedCount, stagedCount);
-        }).toList(),
-      );
+    shrinkWrap: true,
+    physics: const NeverScrollableScrollPhysics(),
+    maxCrossAxisExtent: 350,
+    childAspectRatio: 3.5,
+    crossAxisSpacing: 12,
+    mainAxisSpacing: 12,
+    children: items.map((item) {
+      int baseCount =
+          game.troops[item] ??
+          game.territories[item] ??
+          game.buildings[item] ??
+          game.boats[item] ??
+          0;
+      int stagedCount = _stagedChanges[item] ?? 0;
+      return _interactiveCard(item, baseCount + stagedCount, stagedCount);
+    }).toList(),
+  );
 
   Widget _resourceCard(GameItem item, int displayCount, int stagedCount) {
-    bool isBeforeGatherAction = game.phase == TurnPhase.weather || game.phase == TurnPhase.gather;
+    bool isBeforeGatherAction =
+        game.phase == TurnPhase.weather || game.phase == TurnPhase.gather;
     bool isExpandPhase = game.phase == TurnPhase.expand;
     bool isDoubled = _doubledProductionResources.contains(item);
-    
-    bool isCraftable = item.woodCost > 0 || item.stoneCost > 0 || item.ironCost > 0 || item.rawIronCost > 0 || item.wheatCost > 0 || item.requirement != null;
-    
-    // Controlla i costi per la risorsa (se craftabile) simulando lo stato attuale del carrello.
-    bool canAffordCrafting = (isExpandPhase && isCraftable) ? _simulateAndCheck((g) => g.canAction(item)) : true;
+
+    bool isCraftable =
+        item.reqBuilding.isNotEmpty ||
+        item.reqTerritory.isNotEmpty ||
+        item.constructionCost.entries.any((element) => element.value > 0);
+
+    bool canAffordCrafting = (isExpandPhase && isCraftable)
+        ? _simulateAndCheck((g) => g.canAction(item))
+        : true;
 
     Color countColor = const Color(0xFF212121);
     if (stagedCount > 0) countColor = const Color(0xFF2E7D32);
     if (stagedCount < 0) countColor = const Color(0xFFC62828);
 
     return Container(
-      decoration: _boardGameDecoration(const Color(0xFFFFF8E1), isInteractive: true),
+      decoration: _boardGameDecoration(
+        const Color(0xFFFFF8E1),
+        isInteractive: true,
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -593,23 +678,37 @@ class _GamePageState extends State<GamePage> {
               Expanded(
                 child: Text(
                   item.name,
-                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Color(0xFF3E2723)),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 18,
+                    color: Color(0xFF3E2723),
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
                 decoration: ShapeDecoration(
                   color: Colors.white,
                   shape: BeveledRectangleBorder(
                     borderRadius: BorderRadius.circular(6),
-                    side: const BorderSide(color: Color(0xFF8D6E63), width: 1.5),
+                    side: const BorderSide(
+                      color: Color(0xFF8D6E63),
+                      width: 1.5,
+                    ),
                   ),
                 ),
                 child: Text(
                   '$displayCount',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: countColor),
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: countColor,
+                  ),
                 ),
               ),
             ],
@@ -625,30 +724,35 @@ class _GamePageState extends State<GamePage> {
                   onPressed: () {
                     setState(() {
                       if (isExpandPhase && isCraftable) {
-                         if (stagedCount > 0) {
-                            _stagedChanges[item] = stagedCount - 1;
-                         } else if (displayCount > 0) {
-                            _stagedChanges[item] = stagedCount - 1;
-                         }
+                        if (stagedCount > 0) {
+                          _stagedChanges[item] = stagedCount - 1;
+                        } else if (displayCount > 0) {
+                          _stagedChanges[item] = stagedCount - 1;
+                        }
                       } else {
-                         if (displayCount > 0) game.resources[item] = displayCount - 1;
+                        if (displayCount > 0)
+                          game.resources[item] = displayCount - 1;
                       }
                     });
                   },
                 ),
                 IconButton(
                   iconSize: 32,
-                  color: canAffordCrafting ? const Color(0xFF388E3C) : Colors.grey.shade400,
+                  color: canAffordCrafting
+                      ? const Color(0xFF388E3C)
+                      : Colors.grey.shade400,
                   icon: const Icon(Icons.add_circle),
-                  onPressed: canAffordCrafting ? () {
-                    setState(() {
-                      if (isExpandPhase && isCraftable) {
-                         _stagedChanges[item] = stagedCount + 1;
-                      } else {
-                         game.resources[item] = displayCount + 1;
-                      }
-                    });
-                  } : null,
+                  onPressed: canAffordCrafting
+                      ? () {
+                          setState(() {
+                            if (isExpandPhase && isCraftable) {
+                              _stagedChanges[item] = stagedCount + 1;
+                            } else {
+                              game.resources[item] = displayCount + 1;
+                            }
+                          });
+                        }
+                      : null,
                 ),
               ] else ...[
                 InkWell(
@@ -658,20 +762,27 @@ class _GamePageState extends State<GamePage> {
                     });
                   },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: ShapeDecoration(
                       color: const Color(0xFFBBDEFB),
                       shape: BeveledRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
-                        side: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                        side: const BorderSide(
+                          color: Color(0xFF1976D2),
+                          width: 2,
+                        ),
                       ),
                     ),
                     child: const Text(
                       '½',
                       style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 18,
-                          color: Color(0xFF0D47A1)),
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                        color: Color(0xFF0D47A1),
+                      ),
                     ),
                   ),
                 ),
@@ -696,27 +807,39 @@ class _GamePageState extends State<GamePage> {
                     });
                   },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: ShapeDecoration(
-                      color: isDoubled ? const Color(0xFFFFD54F) : Colors.grey.shade200,
+                      color: isDoubled
+                          ? const Color(0xFFFFD54F)
+                          : Colors.grey.shade200,
                       shape: BeveledRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
-                        side: BorderSide(color: isDoubled ? const Color(0xFFF57F17) : Colors.grey, width: 2),
+                        side: BorderSide(
+                          color: isDoubled
+                              ? const Color(0xFFF57F17)
+                              : Colors.grey,
+                          width: 2,
+                        ),
                       ),
                     ),
                     child: Text(
                       'x2',
                       style: TextStyle(
-                        fontWeight: FontWeight.w900, 
+                        fontWeight: FontWeight.w900,
                         fontSize: 16,
-                        color: isDoubled ? const Color(0xFFE65100) : Colors.grey.shade600
+                        color: isDoubled
+                            ? const Color(0xFFE65100)
+                            : Colors.grey.shade600,
                       ),
                     ),
                   ),
                 ),
-              ]
+              ],
             ],
-          )
+          ),
         ],
       ),
     );
@@ -724,23 +847,31 @@ class _GamePageState extends State<GamePage> {
 
   Widget _interactiveCard(GameItem item, int displayCount, int stagedCount) {
     bool isExpandPhase = game.phase == TurnPhase.expand;
-    
+
     // Controlla se possiamo comprarlo, chiedendo dinamicamente a game_model se il costo + requirement è rispettato
-    bool canAfford = isExpandPhase ? _simulateAndCheck((g) => g.canAction(item)) : false;
-    
+    bool canAfford = isExpandPhase
+        ? _simulateAndCheck((g) => g.canAction(item))
+        : false;
+
     // Controlla se possiamo eliminarlo (es. nessun altro pezzo si appoggia in modo critico a questo)
-    bool canRemove = (displayCount > 0 && isExpandPhase) ? _simulateAndCheck((g) => g.canRemove(item)) : false;
-    
-    if (isExpandPhase && (item == Territories.horse.item || item == Territories.sheep.item)) {
-        canAfford = true;
+    bool canRemove = (displayCount > 0 && isExpandPhase)
+        ? _simulateAndCheck((g) => g.canRemove(item))
+        : false;
+
+    if (isExpandPhase &&
+        (item == Territories.horse.item || item == Territories.sheep.item)) {
+      canAfford = true;
     }
-    
+
     Color countColor = const Color(0xFF212121);
     if (stagedCount > 0) countColor = const Color(0xFF2E7D32);
     if (stagedCount < 0) countColor = const Color(0xFFC62828);
 
     return Container(
-      decoration: _boardGameDecoration(const Color(0xFFFFF8E1), isInteractive: true),
+      decoration: _boardGameDecoration(
+        const Color(0xFFFFF8E1),
+        isInteractive: true,
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
@@ -749,7 +880,11 @@ class _GamePageState extends State<GamePage> {
           Expanded(
             child: Text(
               item.name,
-              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFF3E2723)),
+              style: const TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 16,
+                color: Color(0xFF3E2723),
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -763,35 +898,51 @@ class _GamePageState extends State<GamePage> {
                 constraints: const BoxConstraints(),
                 icon: Icon(
                   Icons.remove_circle,
-                  color: canRemove ? const Color(0xFFD32F2F) : Colors.grey.shade400,
+                  color: canRemove
+                      ? const Color(0xFFD32F2F)
+                      : Colors.grey.shade400,
                 ),
-                onPressed: canRemove ? () {
-                  setState(() {
-                    if (stagedCount > 0) {
-                      _stagedChanges[item] = stagedCount - 1;
-                      if (item == Territories.field.item && _stagedFieldConfigs.isNotEmpty) _stagedFieldConfigs.removeLast();
-                      if (item == Buildings.river.item && _stagedRiverConfigs.isNotEmpty) _stagedRiverConfigs.removeLast();
-                      
-                      if (item == Territories.horse.item || item == Territories.sheep.item) {
-                         int conquered = _stagedConqueredAnimals[item] ?? 0;
-                         if (stagedCount - 1 < conquered) {
-                             _stagedConqueredAnimals[item] = conquered - 1;
-                         }
+                onPressed: canRemove
+                    ? () {
+                        setState(() {
+                          if (stagedCount > 0) {
+                            _stagedChanges[item] = stagedCount - 1;
+                            if (item == Territories.field.item &&
+                                _stagedFieldConfigs.isNotEmpty)
+                              _stagedFieldConfigs.removeLast();
+                            if (item == Buildings.river.item &&
+                                _stagedRiverConfigs.isNotEmpty)
+                              _stagedRiverConfigs.removeLast();
+
+                            if (item == Territories.horse.item ||
+                                item == Territories.sheep.item) {
+                              int conquered =
+                                  _stagedConqueredAnimals[item] ?? 0;
+                              if (stagedCount - 1 < conquered) {
+                                _stagedConqueredAnimals[item] = conquered - 1;
+                              }
+                            }
+                          } else {
+                            _stagedChanges[item] = stagedCount - 1;
+                          }
+                        });
                       }
-                    } else {
-                      _stagedChanges[item] = stagedCount - 1;
-                    }
-                  });
-                } : null,
+                    : null,
               ),
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
                 decoration: ShapeDecoration(
                   color: Colors.white,
                   shape: BeveledRectangleBorder(
                     borderRadius: BorderRadius.circular(4),
-                    side: const BorderSide(color: Color(0xFF8D6E63), width: 1.5),
+                    side: const BorderSide(
+                      color: Color(0xFF8D6E63),
+                      width: 1.5,
+                    ),
                   ),
                 ),
                 child: Text(
@@ -809,15 +960,26 @@ class _GamePageState extends State<GamePage> {
                 constraints: const BoxConstraints(),
                 icon: Icon(
                   Icons.add_circle,
-                  color: canAfford ? const Color(0xFF388E3C) : Colors.grey.shade400,
+                  color: canAfford
+                      ? const Color(0xFF388E3C)
+                      : Colors.grey.shade400,
                 ),
                 onPressed: canAfford
                     ? () {
                         if (item == Territories.field.item) {
-                          _showRiverCountDialog(context, isField: true, isStaging: true);
+                          _showRiverCountDialog(
+                            context,
+                            isField: true,
+                            isStaging: true,
+                          );
                         } else if (item == Buildings.river.item) {
-                          _showRiverCountDialog(context, isField: false, isStaging: true);
-                        } else if (item == Territories.horse.item || item == Territories.sheep.item) {
+                          _showRiverCountDialog(
+                            context,
+                            isField: false,
+                            isStaging: true,
+                          );
+                        } else if (item == Territories.horse.item ||
+                            item == Territories.sheep.item) {
                           _showAnimalActionDialog(context, item, stagedCount);
                         } else {
                           setState(() {
@@ -834,7 +996,11 @@ class _GamePageState extends State<GamePage> {
     );
   }
 
-  void _showAnimalActionDialog(BuildContext context, GameItem item, int stagedCount) {
+  void _showAnimalActionDialog(
+    BuildContext context,
+    GameItem item,
+    int stagedCount,
+  ) {
     bool canReproduce = _simulateAndCheck((g) => g.canAction(item));
 
     showDialog(
@@ -862,30 +1028,57 @@ class _GamePageState extends State<GamePage> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFA5D6A7),
                 side: const BorderSide(color: Color(0xFF4E342E), width: 2),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
               ),
               onPressed: () {
                 setState(() {
                   _stagedChanges[item] = stagedCount + 1;
-                  _stagedConqueredAnimals[item] = (_stagedConqueredAnimals[item] ?? 0) + 1;
+                  _stagedConqueredAnimals[item] =
+                      (_stagedConqueredAnimals[item] ?? 0) + 1;
                 });
                 Navigator.pop(context);
               },
-              child: const Text('Conquista\n(Gratis)', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF1B5E20), fontWeight: FontWeight.bold)),
+              child: const Text(
+                'Conquista\n(Gratis)',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Color(0xFF1B5E20),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: canReproduce ? const Color(0xFFFFCC80) : Colors.grey.shade400,
+                backgroundColor: canReproduce
+                    ? const Color(0xFFFFCC80)
+                    : Colors.grey.shade400,
                 side: const BorderSide(color: Color(0xFF4E342E), width: 2),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
               ),
-              onPressed: canReproduce ? () {
-                setState(() {
-                  _stagedChanges[item] = stagedCount + 1;
-                });
-                Navigator.pop(context);
-              } : null,
-              child: Text('Riproduci\n(-${item.wheatCost} Grano)', textAlign: TextAlign.center, style: TextStyle(color: canReproduce ? const Color(0xFFE65100) : Colors.grey.shade700, fontWeight: FontWeight.bold)),
+              onPressed: canReproduce
+                  ? () {
+                      setState(() {
+                        _stagedChanges[item] = stagedCount + 1;
+                      });
+                      Navigator.pop(context);
+                    }
+                  : null,
+              child: Text(
+                'Riproduci\n(-${item.turnCost.entries.singleWhere((element) => element.key.item == Resources.wheat.item).value} Grano)',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: canReproduce
+                      ? const Color(0xFFE65100)
+                      : Colors.grey.shade700,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ],
         );
@@ -906,7 +1099,10 @@ class _GamePageState extends State<GamePage> {
           ),
           title: const Text(
             'DEBITO DI GRANO!',
-            style: TextStyle(color: Color(0xFFC62828), fontWeight: FontWeight.w900),
+            style: TextStyle(
+              color: Color(0xFFC62828),
+              fontWeight: FontWeight.w900,
+            ),
           ),
           content: ListenableBuilder(
             listenable: game,
@@ -921,13 +1117,18 @@ class _GamePageState extends State<GamePage> {
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD32F2F)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD32F2F),
+                      ),
                       onPressed: () {
                         game.currentDeficit = 0;
                         Navigator.pop(context);
                         game.nextPhase();
                       },
-                      child: const Text("Continua (Bancarotta)", style: TextStyle(color: Colors.white)),
+                      child: const Text(
+                        "Continua (Bancarotta)",
+                        style: TextStyle(color: Colors.white),
+                      ),
                     ),
                   ],
                 );
@@ -947,7 +1148,8 @@ class _GamePageState extends State<GamePage> {
                     ),
                     ...game.disposableItems.map((item) {
                       int saving = game.getItemUpkeep(item);
-                      int count = game.territories[item] ??
+                      int count =
+                          game.territories[item] ??
                           game.troops[item] ??
                           game.buildings[item] ??
                           0;
@@ -957,7 +1159,10 @@ class _GamePageState extends State<GamePage> {
                           item.icon,
                           style: const TextStyle(fontSize: 28),
                         ),
-                        title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        title: Text(
+                          item.name,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
                         subtitle: Text('Posseduti: $count'),
                         trailing: ElevatedButton(
                           style: ElevatedButton.styleFrom(
@@ -971,7 +1176,13 @@ class _GamePageState extends State<GamePage> {
                               game.nextPhase();
                             }
                           },
-                          child: Text('Distruggi (+$saving)', style: const TextStyle(color: Color(0xFF3E2723), fontWeight: FontWeight.bold)),
+                          child: Text(
+                            'Distruggi (+$saving)',
+                            style: const TextStyle(
+                              color: Color(0xFF3E2723),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       );
                     }),
@@ -985,7 +1196,11 @@ class _GamePageState extends State<GamePage> {
     );
   }
 
-  Future<void> _showDiscardAmountDialog(BuildContext context, GameItem resource, int maxAmount) async {
+  Future<void> _showDiscardAmountDialog(
+    BuildContext context,
+    GameItem resource,
+    int maxAmount,
+  ) async {
     int selectedAmount = 1;
     TextEditingController textController = TextEditingController(text: '1');
 
@@ -994,14 +1209,15 @@ class _GamePageState extends State<GamePage> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setStateModal) {
-            
             void updateAmount(int newAmount) {
               setStateModal(() {
                 if (newAmount < 1) newAmount = 1;
                 if (newAmount > maxAmount) newAmount = maxAmount;
                 selectedAmount = newAmount;
                 textController.text = selectedAmount.toString();
-                textController.selection = TextSelection.fromPosition(TextPosition(offset: textController.text.length));
+                textController.selection = TextSelection.fromPosition(
+                  TextPosition(offset: textController.text.length),
+                );
               });
             }
 
@@ -1011,7 +1227,10 @@ class _GamePageState extends State<GamePage> {
                 borderRadius: BorderRadius.circular(16),
                 side: const BorderSide(color: Color(0xFF4E342E), width: 3),
               ),
-              title: Text('Scarta ${resource.name}', style: const TextStyle(fontWeight: FontWeight.w900)),
+              title: Text(
+                'Scarta ${resource.name}',
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1031,19 +1250,28 @@ class _GamePageState extends State<GamePage> {
                       const SizedBox(width: 16),
                       Container(
                         width: 80,
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: ShapeDecoration(
                           color: Colors.white,
                           shape: BeveledRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
-                            side: const BorderSide(color: Color(0xFF4E342E), width: 2),
+                            side: const BorderSide(
+                              color: Color(0xFF4E342E),
+                              width: 2,
+                            ),
                           ),
                         ),
                         child: TextField(
                           controller: textController,
                           keyboardType: TextInputType.number,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900),
+                          style: const TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                          ),
                           decoration: const InputDecoration(
                             border: InputBorder.none,
                             isDense: true,
@@ -1058,7 +1286,7 @@ class _GamePageState extends State<GamePage> {
                                 selectedAmount = parsed;
                               }
                             } else {
-                              selectedAmount = 0; 
+                              selectedAmount = 0;
                             }
                           },
                           onEditingComplete: () {
@@ -1077,19 +1305,25 @@ class _GamePageState extends State<GamePage> {
                             : null,
                       ),
                     ],
-                  )
+                  ),
                 ],
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Annulla', style: TextStyle(color: Color(0xFF3E2723), fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'Annulla',
+                    style: TextStyle(
+                      color: Color(0xFF3E2723),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
                 ElevatedButton(
                   onPressed: () {
                     if (selectedAmount < 1) selectedAmount = 1;
                     if (selectedAmount > maxAmount) selectedAmount = maxAmount;
-                    
+
                     for (int i = 0; i < selectedAmount; i++) {
                       game.discardResource(resource);
                     }
@@ -1097,9 +1331,17 @@ class _GamePageState extends State<GamePage> {
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFF57F17),
-                    shape: BeveledRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: BeveledRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
-                  child: const Text('Conferma', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'Conferma',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ],
             );
@@ -1122,7 +1364,10 @@ class _GamePageState extends State<GamePage> {
           ),
           title: const Text(
             'MAGAZZINI PIENI!',
-            style: TextStyle(color: Color(0xFFE65100), fontWeight: FontWeight.w900),
+            style: TextStyle(
+              color: Color(0xFFE65100),
+              fontWeight: FontWeight.w900,
+            ),
           ),
           content: ListenableBuilder(
             listenable: game,
@@ -1152,7 +1397,10 @@ class _GamePageState extends State<GamePage> {
                           resource.icon,
                           style: const TextStyle(fontSize: 28),
                         ),
-                        title: Text(resource.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        title: Text(
+                          resource.name,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
                         subtitle: Text('Possedute: $count'),
                         trailing: ElevatedButton(
                           style: ElevatedButton.styleFrom(
@@ -1160,13 +1408,23 @@ class _GamePageState extends State<GamePage> {
                             side: const BorderSide(color: Color(0xFF4E342E)),
                           ),
                           onPressed: () async {
-                            await _showDiscardAmountDialog(context, resource, count);
+                            await _showDiscardAmountDialog(
+                              context,
+                              resource,
+                              count,
+                            );
                             if (!game.hasExcess) {
                               if (context.mounted) Navigator.pop(context);
                               game.nextPhase();
                             }
                           },
-                          child: const Text('Scarta...', style: TextStyle(color: Color(0xFF3E2723), fontWeight: FontWeight.bold)),
+                          child: const Text(
+                            'Scarta...',
+                            style: TextStyle(
+                              color: Color(0xFF3E2723),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       );
                     }),
@@ -1251,14 +1509,17 @@ class _GamePageState extends State<GamePage> {
 
                 return GestureDetector(
                   onTap: () {
-                    game.setWeather(weatherType); 
+                    game.setWeather(weatherType);
                     Navigator.pop(context);
                     game.nextPhase();
                   },
                   child: Container(
                     width: double.maxFinite,
                     margin: const EdgeInsets.only(bottom: 12),
-                    decoration: _boardGameDecoration(bgColor, isInteractive: true),
+                    decoration: _boardGameDecoration(
+                      bgColor,
+                      isInteractive: true,
+                    ),
                     padding: const EdgeInsets.all(16),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1351,7 +1612,10 @@ class _GamePageState extends State<GamePage> {
                       game.nextPhase();
                     },
                     child: Container(
-                      decoration: _boardGameDecoration(const Color(0xFFA5D6A7), isInteractive: true),
+                      decoration: _boardGameDecoration(
+                        const Color(0xFFA5D6A7),
+                        isInteractive: true,
+                      ),
                       padding: const EdgeInsets.all(16),
                       alignment: Alignment.center,
                       child: const Text(
@@ -1373,7 +1637,11 @@ class _GamePageState extends State<GamePage> {
     );
   }
 
-  void _showRiverCountDialog(BuildContext context, {required bool isField, bool isStaging = false}) {
+  void _showRiverCountDialog(
+    BuildContext context, {
+    required bool isField,
+    bool isStaging = false,
+  }) {
     int count = 0;
     int maxLimit = isField ? 6 : 2;
 
@@ -1403,7 +1671,9 @@ class _GamePageState extends State<GamePage> {
               const SizedBox(height: 16),
               TextField(
                 decoration: InputDecoration(
-                  labelText: isField ? 'Numero Fiumi (0-6)' : 'Campi Irrigati (0-2)',
+                  labelText: isField
+                      ? 'Numero Fiumi (0-6)'
+                      : 'Campi Irrigati (0-2)',
                   filled: true,
                   fillColor: Colors.white,
                 ),
@@ -1419,10 +1689,12 @@ class _GamePageState extends State<GamePage> {
                   if (isStaging) {
                     setState(() {
                       if (isField) {
-                        _stagedChanges[Territories.field.item] = (_stagedChanges[Territories.field.item] ?? 0) + 1;
+                        _stagedChanges[Territories.field.item] =
+                            (_stagedChanges[Territories.field.item] ?? 0) + 1;
                         _stagedFieldConfigs.add(count);
                       } else {
-                        _stagedChanges[Buildings.river.item] = (_stagedChanges[Buildings.river.item] ?? 0) + 1;
+                        _stagedChanges[Buildings.river.item] =
+                            (_stagedChanges[Buildings.river.item] ?? 0) + 1;
                         _stagedRiverConfigs.add(count);
                       }
                     });
@@ -1443,7 +1715,10 @@ class _GamePageState extends State<GamePage> {
                   Navigator.pop(context);
                 },
                 child: Container(
-                  decoration: _boardGameDecoration(const Color(0xFFFFCC80), isInteractive: true),
+                  decoration: _boardGameDecoration(
+                    const Color(0xFFFFCC80),
+                    isInteractive: true,
+                  ),
                   padding: const EdgeInsets.all(16),
                   alignment: Alignment.center,
                   child: const Text(

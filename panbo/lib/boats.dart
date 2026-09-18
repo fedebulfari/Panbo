@@ -1,10 +1,11 @@
 import 'package:panbo/buildings.dart';
+import 'package:panbo/resources.dart';
 import 'game_model.dart';
 
 enum Boats {
-  brigade(GameItem(name: 'Brigata',icon: '⛵', woodCost: 50,woolCost: 30, ironCost: 3,capacity: 200, requirement:Buildings.harbor)),
-  galleon(GameItem(name: 'Galeone',icon: '🚢', woodCost: 20,woolCost: 15,capacity: 50, requirement:Buildings.harbor)),
-  raft(GameItem(name: 'Zattera', icon: '🛶', woodCost: 10, capacity: 20, requirement:Buildings.harbor));
+  brigade(GameItem(name: 'Brigata',icon: '⛵', constructionCost:{Resources.wood:60, Resources.wool:30, Resources.iron:2}, capacity: 350, reqBuilding:{Buildings.harbor: true})),
+  galleon(GameItem(name: 'Galeone',icon: '🚢', constructionCost:{Resources.wood:30, Resources.wool:15}, capacity: 100, reqBuilding:{Buildings.harbor: true})),
+  raft(GameItem(name: 'Zattera', icon: '🛶', constructionCost:{Resources.wood:20}, capacity: 30, reqBuilding:{Buildings.harbor: true}));
 
   final GameItem item;
   

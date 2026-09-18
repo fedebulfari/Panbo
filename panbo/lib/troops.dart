@@ -1,14 +1,19 @@
 import 'package:panbo/buildings.dart';
+import 'package:panbo/resources.dart';
+import 'package:panbo/territories.dart';
 
 import 'game_model.dart';
 
 enum Troops {
-  brigands(GameItem(name: 'Briganti', icon: '🗡️', cost: 1, wheatCost: 1, woodCost: 3, stoneCost: 1, requirement: Buildings.barracks),),
-  knights(GameItem( name: 'Cavalieri', icon: '🐴', cost: 2, wheatCost: 1, woodCost: 3, horseCost: 1, requirement: Buildings.barracks),),
-  soldiers(GameItem(name: 'Soldati', icon: '⚔️', cost: 1, wheatCost: 1, woodCost: 3, ironCost: 1, requirement: Buildings.barracks),),
-  batteringRam(GameItem(name: 'Arieti', icon: '🔨', cost: 3, wheatCost: 3, woodCost: 5, stoneCost: 3, requirement: Buildings.barracks),),
-  trebuchet(GameItem(name: 'Trabucchi', icon: '🎯', cost: 3, wheatCost: 3, woodCost: 10, requirement: Buildings.barracks),),
-  caravan(GameItem(name: 'Carovane', icon: '🐫', cost: 3, woodCost: 10, horseCost: 1, requirement: Buildings.barracks),);
+  brigands(GameItem(name: 'Briganti', icon: '🗡️', turnCost: {Resources.wheat:2}, constructionCost:{Resources.wheat:2, Resources.wood:3, Resources.stone:1}, reqBuilding: {Buildings.barracks: false})),
+  knights(GameItem( name: 'Cavalieri', icon: '🐴', turnCost: {Resources.wheat:4}, constructionCost:{Resources.wheat:2, Resources.wood:3},reqTerritory:  {Territories.horse: true}, reqBuilding: {Buildings.barracks: false})),
+  soldiers(GameItem(name: 'Soldati', icon: '⚔️', turnCost: {Resources.wheat:2}, constructionCost:{Resources.wheat:2, Resources.wood:3, Resources.iron:1}, reqBuilding: {Buildings.barracks: false})),
+  batteringRam(GameItem(name: 'Arieti', icon: '🔨', turnCost: {Resources.wheat:6}, constructionCost:{Resources.wheat:6, Resources.wood:5, Resources.stone:3}, reqBuilding: {Buildings.barracks: false})),
+  batteringRam2(GameItem(name: 'Arieti Pesanti', icon: '🔨', turnCost: {Resources.wheat:6}, constructionCost:{Resources.wheat:6, Resources.wood:5, Resources.iron:1}, reqBuilding: {Buildings.barracks: false})),
+  trebuchet(GameItem(name: 'Trabucchi', icon: '🎯', turnCost: {Resources.wheat:3}, constructionCost:{Resources.wheat:3, Resources.wood:10}, reqBuilding: {Buildings.barracks: false})),
+  trebuchet2(GameItem(name: 'Sfonda Muro', icon: '🎯', turnCost: {Resources.wheat:3}, constructionCost:{Resources.wheat:3, Resources.wood:20, Resources.iron:1}, reqBuilding: {Buildings.barracks: false})),
+  caravan(GameItem(name: 'Carovane', icon: '🐫', turnCost: {Resources.wheat:3}, constructionCost:{Resources.wood:10}, reqTerritory: {Territories.horse: true}, reqBuilding: {Buildings.barracks: false},capacity: 30)),
+  caravan2(GameItem(name: 'Carovane Blindate', icon: '🐫', turnCost: {Resources.wheat:5}, constructionCost:{Resources.wood:20, Resources.iron:1}, reqTerritory: {Territories.horse: true}, reqBuilding: {Buildings.barracks: false},capacity: 150));
 
   final GameItem item;
 
