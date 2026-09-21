@@ -41,6 +41,8 @@ class _GamePageState extends State<GamePage> {
   final Map<GameItem, int> _stagedChanges = {};
   final List<int> _stagedFieldConfigs = [];
   final List<int> _stagedRiverConfigs = [];
+  final List<int> _stagedFieldRemovals = []; 
+  final List<int> _stagedRiverRemovals = [];
   final Map<GameItem, int> _stagedConqueredAnimals = {};
 
   // Funzione Suprema: Simula il carrello in tempo reale e interroga game_model.dart
@@ -137,6 +139,8 @@ class _GamePageState extends State<GamePage> {
                   _stagedChanges.clear();
                   _stagedFieldConfigs.clear();
                   _stagedRiverConfigs.clear();
+                  _stagedFieldRemovals.clear();
+                  _stagedRiverRemovals.clear();
                   _stagedConqueredAnimals.clear();
                   game.reset();
                 },
@@ -323,9 +327,18 @@ class _GamePageState extends State<GamePage> {
                   }
                 });
 
+                for (int loss in _stagedFieldRemovals) {
+                  game.removeIrrigation(loss);
+                }
+                for (int loss in _stagedRiverRemovals) {
+                  game.removeIrrigation(loss);
+                }
+
                 _stagedChanges.clear();
                 _stagedFieldConfigs.clear();
                 _stagedRiverConfigs.clear();
+                _stagedFieldRemovals.clear(); 
+                _stagedRiverRemovals.clear(); 
                 _stagedConqueredAnimals.clear();
 
                 game.nextPhase();
@@ -588,7 +601,13 @@ class _GamePageState extends State<GamePage> {
                 int stagedIrrigation = _stagedFieldConfigs.fold(0, (sum, val) => sum + val) + 
                                        _stagedRiverConfigs.fold(0, (sum, val) => sum + val);
 
-                expectedProd += (game.irrigatedfields + stagedIrrigation) * Territories.field.item.gain[Resources.wheat]!;
+                int stagedIrrigationLoss = _stagedFieldRemovals.fold(0, (sum, val) => sum + val) + 
+                                           _stagedRiverRemovals.fold(0, (sum, val) => sum + val);
+
+                int finalIrrigated = game.irrigatedfields + stagedIrrigation - stagedIrrigationLoss;
+                if (finalIrrigated < 0) finalIrrigated = 0;
+
+                expectedProd += finalIrrigated * Territories.field.item.gain[Resources.wheat]!;
                 if (game.currentWeather == WeatherType.stormy) {
                   expectedProd = expectedProd ~/ 2; 
                 }
@@ -854,19 +873,22 @@ class _GamePageState extends State<GamePage> {
 
   Widget _interactiveCard(GameItem item, int displayCount, int stagedCount) {
     bool isExpandPhase = game.phase == TurnPhase.expand;
+    bool isUndoingRemoval = stagedCount < 0;
 
-    bool canAfford = isExpandPhase
-        ? _simulateAndCheck((g) => g.canAction(item))
-        : false;
+    bool canAfford = false;
+    if (isExpandPhase) {
+      if (isUndoingRemoval) {
+        canAfford = true; 
+      } else if (item == Territories.horse.item || item == Territories.sheep.item) {
+        canAfford = true;
+      } else {
+        canAfford = _simulateAndCheck((g) => g.canAction(item));
+      }
+    }
 
     bool canRemove = (displayCount > 0 && isExpandPhase)
         ? _simulateAndCheck((g) => g.canRemove(item))
         : false;
-
-    if (isExpandPhase &&
-        (item == Territories.horse.item || item == Territories.sheep.item)) {
-      canAfford = true;
-    }
 
     Color countColor = const Color(0xFF212121);
     if (stagedCount > 0) countColor = const Color(0xFF2E7D32);
@@ -909,28 +931,32 @@ class _GamePageState extends State<GamePage> {
                 ),
                 onPressed: canRemove
                     ? () {
-                        setState(() {
-                          if (stagedCount > 0) {
+                        if (stagedCount > 0) {
+                          setState(() {
                             _stagedChanges[item] = stagedCount - 1;
-                            if (item == Territories.field.item &&
-                                _stagedFieldConfigs.isNotEmpty)
+                            if (item == Territories.field.item && _stagedFieldConfigs.isNotEmpty)
                               _stagedFieldConfigs.removeLast();
-                            if (item == Buildings.river.item &&
-                                _stagedRiverConfigs.isNotEmpty)
+                            if (item == Buildings.river.item && _stagedRiverConfigs.isNotEmpty)
                               _stagedRiverConfigs.removeLast();
-
-                            if (item == Territories.horse.item ||
-                                item == Territories.sheep.item) {
-                              int conquered =
-                                  _stagedConqueredAnimals[item] ?? 0;
+                            
+                            if (item == Territories.horse.item || item == Territories.sheep.item) {
+                              int conquered = _stagedConqueredAnimals[item] ?? 0;
                               if (stagedCount - 1 < conquered) {
                                 _stagedConqueredAnimals[item] = conquered - 1;
                               }
                             }
+                          });
+                        } else {
+                          if (item == Territories.field.item) {
+                            _showRemoveIrrigationDialog(context, isField: true);
+                          } else if (item == Buildings.river.item) {
+                            _showRemoveIrrigationDialog(context, isField: false);
                           } else {
-                            _stagedChanges[item] = stagedCount - 1;
+                            setState(() {
+                              _stagedChanges[item] = stagedCount - 1;
+                            });
                           }
-                        });
+                        }
                       }
                     : null,
               ),
@@ -971,25 +997,36 @@ class _GamePageState extends State<GamePage> {
                 ),
                 onPressed: canAfford
                     ? () {
-                        if (item == Territories.field.item) {
-                          _showRiverCountDialog(
-                            context,
-                            isField: true,
-                            isStaging: true,
-                          );
-                        } else if (item == Buildings.river.item) {
-                          _showRiverCountDialog(
-                            context,
-                            isField: false,
-                            isStaging: true,
-                          );
-                        } else if (item == Territories.horse.item ||
-                            item == Territories.sheep.item) {
-                          _showAnimalActionDialog(context, item, stagedCount);
-                        } else {
+                        if (isUndoingRemoval) {
                           setState(() {
                             _stagedChanges[item] = stagedCount + 1;
+                            if (item == Territories.field.item && _stagedFieldRemovals.isNotEmpty) {
+                              _stagedFieldRemovals.removeLast();
+                            } else if (item == Buildings.river.item && _stagedRiverRemovals.isNotEmpty) {
+                              _stagedRiverRemovals.removeLast();
+                            }
                           });
+                        } else {
+                          if (item == Territories.field.item) {
+                            _showRiverCountDialog(
+                              context,
+                              isField: true,
+                              isStaging: true,
+                            );
+                          } else if (item == Buildings.river.item) {
+                            _showRiverCountDialog(
+                              context,
+                              isField: false,
+                              isStaging: true,
+                            );
+                          } else if (item == Territories.horse.item ||
+                              item == Territories.sheep.item) {
+                            _showAnimalActionDialog(context, item, stagedCount);
+                          } else {
+                            setState(() {
+                              _stagedChanges[item] = stagedCount + 1;
+                            });
+                          }
                         }
                       }
                     : null,
@@ -1735,6 +1772,89 @@ class _GamePageState extends State<GamePage> {
                     style: TextStyle(
                       fontWeight: FontWeight.w900,
                       color: Color(0xFFE65100),
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showRemoveIrrigationDialog(
+    BuildContext context, {
+    required bool isField,
+  }) {
+    int count = 0;
+    int maxLimit = isField ? 6 : 2;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFFF3E5AB),
+          shape: BeveledRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0xFF4E342E), width: 3),
+          ),
+          title: Text(
+            isField ? 'RIMUOVI CAMPO' : 'RIMUOVI FIUME',
+            style: const TextStyle(fontWeight: FontWeight.w900),
+            textAlign: TextAlign.center,
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                isField
+                    ? 'Quanti fiumi bagnavano questo campo? (Max 6)'
+                    : 'Quanti campi irrigava questo fiume? (Max 2)',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                decoration: InputDecoration(
+                  labelText: isField ? 'Fiumi rimossi (0-6)' : 'Campi persi (0-2)',
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+                keyboardType: TextInputType.number,
+                onChanged: (val) => count = int.tryParse(val) ?? 0,
+              ),
+              const SizedBox(height: 24),
+              GestureDetector(
+                onTap: () {
+                  if (count < 0) count = 0;
+                  if (count > maxLimit) count = maxLimit;
+
+                  setState(() {
+                    if (isField) {
+                      _stagedChanges[Territories.field.item] =
+                          (_stagedChanges[Territories.field.item] ?? 0) - 1;
+                      _stagedFieldRemovals.add(count);
+                    } else {
+                      _stagedChanges[Buildings.river.item] =
+                          (_stagedChanges[Buildings.river.item] ?? 0) - 1;
+                      _stagedRiverRemovals.add(count);
+                    }
+                  });
+                  Navigator.pop(context);
+                },
+                child: Container(
+                  decoration: _boardGameDecoration(
+                    const Color(0xFFEF9A9A),
+                    isInteractive: true,
+                  ),
+                  padding: const EdgeInsets.all(16),
+                  alignment: Alignment.center,
+                  child: const Text(
+                    'CONFERMA RIMOZIONE',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFFC62828),
                       fontSize: 16,
                     ),
                   ),

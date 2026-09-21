@@ -311,7 +311,6 @@ class GameState extends ChangeNotifier {
     if (rivers < 0) rivers = 0;
     if (rivers > 6) rivers = 6;
     
-    territories[Territories.field.item] = (territories[Territories.field.item] ?? 0) + 1;
     irrigatedfields = irrigatedfields + rivers;
     notifyListeners();
   }
@@ -320,7 +319,12 @@ class GameState extends ChangeNotifier {
     if (fieldsConnected < 0) fieldsConnected = 0;
     if (fieldsConnected > 2) fieldsConnected = 2;
     irrigatedfields = irrigatedfields + fieldsConnected;
-    buildings[Buildings.river.item] = (buildings[Buildings.river.item] ?? 0) + 1;
+    notifyListeners();
+  }
+
+  void removeIrrigation(int amount) {
+    irrigatedfields -= amount;
+    if (irrigatedfields < 0) irrigatedfields = 0;
     notifyListeners();
   }
 
@@ -424,9 +428,6 @@ class GameState extends ChangeNotifier {
         final currentCount = map[item] ?? 0;
         final newCount = currentCount - amount;
         map[item] = newCount > 0 ? newCount : 0;
-        if (item == Territories.field.item && newCount >= 0) {
-          irrigatedfields = irrigatedfields > 0 ? irrigatedfields - 1 : 0;
-        }
         break;
       }
     }
