@@ -380,39 +380,13 @@ class GameState extends ChangeNotifier {
   }
 
   bool canRemove(GameItem item) {
-    Buildings? targetBuilding;
-    for (var b in Buildings.values) {
-       if (b.item == item) {
-          targetBuilding = b;
-          break;
-       }
-    }
-    if (targetBuilding == null) return true; 
+    int currentCount = (buildings[item] ?? 0) + 
+                       (troops[item] ?? 0) + 
+                       (boats[item] ?? 0) + 
+                       (territories[item] ?? 0) + 
+                       (resources[item] ?? 0);
 
-    int itemCurrentCount = (buildings[item] ?? 0) + (troops[item] ?? 0) + (boats[item] ?? 0) + (territories[item] ?? 0) + (resources[item] ?? 0);
-    if (itemCurrentCount > 1) return true; // Ne resterebbe almeno 1.
-
-    final allItems = [
-      ...Resources.values.map((e) => e.item),
-      ...Troops.values.map((e) => e.item),
-      ...Boats.values.map((e) => e.item),
-      ...Territories.values.map((e) => e.item),
-      ...Buildings.values.map((e) => e.item),
-    ];
-
-    for (var other in allItems) {
-       if (other.reqBuilding == targetBuilding) {
-          bool isConsumedUpgrade = (other.reqBuilding != Buildings.road && 
-                                    other.reqBuilding != Buildings.forge && 
-                                    other.reqBuilding != Buildings.barracks);
-                             
-          if (!isConsumedUpgrade) {
-              int count = (resources[other] ?? 0) + (troops[other] ?? 0) + (boats[other] ?? 0) + (territories[other] ?? 0) + (buildings[other] ?? 0);
-              if (count > 0) return false; // C'è un pezzo dipendente in gioco, non puoi distruggerlo!
-          }
-       }
-    }
-    return true;
+    return currentCount > 0;
   }
 
   void kill(GameItem item, {int amount = 1}) {

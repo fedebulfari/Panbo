@@ -934,10 +934,12 @@ class _GamePageState extends State<GamePage> {
                         if (stagedCount > 0) {
                           setState(() {
                             _stagedChanges[item] = stagedCount - 1;
-                            if (item == Territories.field.item && _stagedFieldConfigs.isNotEmpty)
+                            if (item == Territories.field.item && _stagedFieldConfigs.isNotEmpty) {
                               _stagedFieldConfigs.removeLast();
-                            if (item == Buildings.river.item && _stagedRiverConfigs.isNotEmpty)
+                            }
+                            if (item == Buildings.river.item && _stagedRiverConfigs.isNotEmpty) {
                               _stagedRiverConfigs.removeLast();
+                            }
                             
                             if (item == Territories.horse.item || item == Territories.sheep.item) {
                               int conquered = _stagedConqueredAnimals[item] ?? 0;
