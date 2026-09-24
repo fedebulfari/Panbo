@@ -1,5 +1,7 @@
 # Panbo Companion App
 
+[![Netlify Status](https://api.netlify.com/api/v1/badges/bd0fac2d-bb5d-480d-8d1f-e4dde695b29a/deploy-status)](https://app.netlify.com/projects/panbo/deploys)
+
 Welcome to the Panbo Companion App! 🎲
 
 ## About the Project
