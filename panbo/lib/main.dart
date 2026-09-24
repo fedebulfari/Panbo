@@ -38,7 +38,8 @@ class _GamePageState extends State<GamePage> {
   int _currentIndex = 0;
   final Set<GameItem> _doubledProductionResources = {};
 
-  final Map<GameItem, int> _stagedChanges = {};
+  final Map<GameItem, int> _stagedAdditions = {};
+  final Map<GameItem, int> _stagedRemovals = {};
   final List<int> _stagedFieldConfigs = [];
   final List<int> _stagedRiverConfigs = [];
   final List<int> _stagedFieldRemovals = []; 
@@ -54,7 +55,19 @@ class _GamePageState extends State<GamePage> {
     final backupBoats = Map<GameItem, int>.from(game.boats);
     final int backupIrrigated = game.irrigatedfields;
 
-    _stagedChanges.forEach((stagedItem, count) {
+    // Processa prima le rimozioni
+    _stagedRemovals.forEach((stagedItem, count) {
+      if (count > 0) {
+        if (Resources.values.any((r) => r.item == stagedItem)) {
+          game.resources[stagedItem] = (game.resources[stagedItem] ?? 0) - count;
+        } else {
+          game.kill(stagedItem, amount: count);
+        }
+      }
+    });
+
+    // Poi le nuove costruzioni
+    _stagedAdditions.forEach((stagedItem, count) {
       if (count > 0) {
         int conquered = _stagedConqueredAnimals[stagedItem] ?? 0;
         
@@ -71,13 +84,6 @@ class _GamePageState extends State<GamePage> {
           if (Resources.values.any((r) => r.item == stagedItem)) {
             game.resources[stagedItem] = (game.resources[stagedItem] ?? 0) + 1;
           }
-        }
-      } else if (count < 0) {
-        if (Resources.values.any((r) => r.item == stagedItem)) {
-          game.resources[stagedItem] =
-              (game.resources[stagedItem] ?? 0) - (-count);
-        } else {
-          game.kill(stagedItem, amount: -count);
         }
       }
     });
@@ -136,7 +142,8 @@ class _GamePageState extends State<GamePage> {
                 tooltip: 'Nuova partita',
                 onPressed: () {
                   _doubledProductionResources.clear();
-                  _stagedChanges.clear();
+                  _stagedAdditions.clear();
+                  _stagedRemovals.clear();
                   _stagedFieldConfigs.clear();
                   _stagedRiverConfigs.clear();
                   _stagedFieldRemovals.clear();
@@ -278,11 +285,24 @@ class _GamePageState extends State<GamePage> {
                   game.nextPhase();
                 }
               } else if (game.phase == TurnPhase.expand) {
+                
+                // 1. Applica prima le rimozioni definitive
+                _stagedRemovals.forEach((item, count) {
+                  if (count > 0) {
+                    if (Resources.values.any((r) => r.item == item)) {
+                      game.resources[item] = (game.resources[item] ?? 0) - count;
+                    } else {
+                      game.kill(item, amount: count);
+                    }
+                  }
+                });
+
+                // 2. Costruisci il nuovo
                 Map<GameItem, int> conqueredAnimalsCopy = Map.from(
                   _stagedConqueredAnimals,
                 );
 
-                _stagedChanges.forEach((item, count) {
+                _stagedAdditions.forEach((item, count) {
                   if (count > 0) {
                     int fieldIdx = 0;
                     int riverIdx = 0;
@@ -290,7 +310,6 @@ class _GamePageState extends State<GamePage> {
                       int conqueredToProcess = conqueredAnimalsCopy[item] ?? 0;
 
                       if (conqueredToProcess > 0) {
-                        // Rimborsa i materiali corretti usati prima di lanciare action()
                         for (final cost in item.constructionCost.entries) {
                           game.resources[cost.key.item] = (game.resources[cost.key.item] ?? 0) + cost.value;
                         }
@@ -317,16 +336,10 @@ class _GamePageState extends State<GamePage> {
                         );
                       }
                     }
-                  } else if (count < 0) {
-                    if (Resources.values.any((r) => r.item == item)) {
-                      game.resources[item] =
-                          (game.resources[item] ?? 0) - (-count);
-                    } else {
-                      game.kill(item, amount: -count);
-                    }
                   }
                 });
 
+                // 3. Regola l'irrigazione delle strutture distrutte
                 for (int loss in _stagedFieldRemovals) {
                   game.removeIrrigation(loss);
                 }
@@ -334,7 +347,8 @@ class _GamePageState extends State<GamePage> {
                   game.removeIrrigation(loss);
                 }
 
-                _stagedChanges.clear();
+                _stagedAdditions.clear();
+                _stagedRemovals.clear();
                 _stagedFieldConfigs.clear();
                 _stagedRiverConfigs.clear();
                 _stagedFieldRemovals.clear(); 
@@ -478,16 +492,15 @@ class _GamePageState extends State<GamePage> {
   Widget _turnSummaryBoard() {
     Map<GameItem, int> projectedCosts = {};
 
-    // Calcolo dei costi proiettati (TEORICI TOTALI)
     game.buildings.forEach((k, v) {
-      int count = v + (_stagedChanges[k] ?? 0);
+      int count = v + (_stagedAdditions[k] ?? 0) - (_stagedRemovals[k] ?? 0);
       for (var res in k.turnCost.entries) {
         projectedCosts[res.key.item] = (projectedCosts[res.key.item] ?? 0) + (res.value * count);
       }
     });
     
     game.troops.forEach((k, v) {
-      int count = v + (_stagedChanges[k] ?? 0);
+      int count = v + (_stagedAdditions[k] ?? 0) - (_stagedRemovals[k] ?? 0);
       for (var res in k.turnCost.entries) {
         int multiplier = (game.isCold && res.key.item == Resources.wheat.item) ? 2 : 1;
         projectedCosts[res.key.item] = (projectedCosts[res.key.item] ?? 0) + (res.value * multiplier * count);
@@ -495,8 +508,7 @@ class _GamePageState extends State<GamePage> {
     });
     
     game.territories.forEach((k, v) {
-      int count = v + (_stagedChanges[k] ?? 0);
-      // Mostriamo SEMPRE i costi richiesti dalle strutture, a prescindere che tu possa pagarli o meno
+      int count = v + (_stagedAdditions[k] ?? 0) - (_stagedRemovals[k] ?? 0);
       for (var res in k.turnCost.entries) {
         projectedCosts[res.key.item] = (projectedCosts[res.key.item] ?? 0) + (res.value * count);
       }
@@ -578,13 +590,12 @@ class _GamePageState extends State<GamePage> {
               int expectedProd = 0;
 
               for (final key in game.territories.keys) {
-                int territoryCount = ((game.territories[key] ?? 0) + (_stagedChanges[key] ?? 0));
+                int territoryCount = ((game.territories[key] ?? 0) + (_stagedAdditions[key] ?? 0) - (_stagedRemovals[key] ?? 0));
                 
-                // Limita la produzione in base alla carenza di costi operativi (es. manca il legno per la Montagna)
                 int activeCount = territoryCount;
                 for (var cost in key.turnCost.entries) {
                   if (cost.key != Resources.wheat) {
-                    int available = (game.resources[cost.key.item] ?? 0) + (_stagedChanges[cost.key.item] ?? 0);
+                    int available = (game.resources[cost.key.item] ?? 0) + (_stagedAdditions[cost.key.item] ?? 0) - (_stagedRemovals[cost.key.item] ?? 0);
                     int max = available ~/ cost.value;
                     if (max < activeCount) activeCount = max;
                   }
@@ -592,7 +603,7 @@ class _GamePageState extends State<GamePage> {
 
                 for (final resource in key.gain.entries) {
                   if (resource.key.item == res && res!=Resources.wheat.item) {
-                    expectedProd += resource.value * activeCount; // Usa activeCount, se mancano i materiali sarà 0
+                    expectedProd += resource.value * activeCount; 
                   }
                 }
               }
@@ -675,8 +686,9 @@ class _GamePageState extends State<GamePage> {
     mainAxisSpacing: 12,
     children: items.map((item) {
       int baseCount = game.resources[item] ?? 0;
-      int stagedCount = _stagedChanges[item] ?? 0;
-      return _resourceCard(item, baseCount + stagedCount, stagedCount);
+      int additions = _stagedAdditions[item] ?? 0;
+      int removals = _stagedRemovals[item] ?? 0;
+      return _resourceCard(item, baseCount, additions, removals);
     }).toList(),
   );
 
@@ -694,12 +706,16 @@ class _GamePageState extends State<GamePage> {
           game.buildings[item] ??
           game.boats[item] ??
           0;
-      int stagedCount = _stagedChanges[item] ?? 0;
-      return _interactiveCard(item, baseCount + stagedCount, stagedCount);
+      int additions = _stagedAdditions[item] ?? 0;
+      int removals = _stagedRemovals[item] ?? 0;
+      return _interactiveCard(item, baseCount, additions, removals);
     }).toList(),
   );
 
-  Widget _resourceCard(GameItem item, int displayCount, int stagedCount) {
+  Widget _resourceCard(GameItem item, int baseCount, int additions, int removals) {
+    int displayCount = baseCount + additions - removals;
+    int stagedCount = additions - removals;
+
     bool isBeforeGatherAction =
         game.phase == TurnPhase.weather || game.phase == TurnPhase.gather;
     bool isExpandPhase = game.phase == TurnPhase.expand;
@@ -780,10 +796,10 @@ class _GamePageState extends State<GamePage> {
                   onPressed: () {
                     setState(() {
                       if (isExpandPhase && isCraftable) {
-                        if (stagedCount > 0) {
-                          _stagedChanges[item] = stagedCount - 1;
-                        } else if (displayCount > 0) {
-                          _stagedChanges[item] = stagedCount - 1;
+                        if (additions > 0) {
+                          _stagedAdditions[item] = additions - 1;
+                        } else if (baseCount - removals > 0) {
+                          _stagedRemovals[item] = removals + 1;
                         }
                       } else {
                         if (displayCount > 0) {
@@ -803,7 +819,11 @@ class _GamePageState extends State<GamePage> {
                       ? () {
                           setState(() {
                             if (isExpandPhase && isCraftable) {
-                              _stagedChanges[item] = stagedCount + 1;
+                              if (removals > 0) {
+                                _stagedRemovals[item] = removals - 1;
+                              } else {
+                                _stagedAdditions[item] = additions + 1;
+                              }
                             } else {
                               game.resources[item] = displayCount + 1;
                             }
@@ -871,9 +891,12 @@ class _GamePageState extends State<GamePage> {
     );
   }
 
-  Widget _interactiveCard(GameItem item, int displayCount, int stagedCount) {
+  Widget _interactiveCard(GameItem item, int baseCount, int additions, int removals) {
+    int displayCount = baseCount + additions - removals;
+    int stagedCount = additions - removals;
+
     bool isExpandPhase = game.phase == TurnPhase.expand;
-    bool isUndoingRemoval = stagedCount < 0;
+    bool isUndoingRemoval = removals > 0;
 
     bool canAfford = false;
     if (isExpandPhase) {
@@ -931,31 +954,36 @@ class _GamePageState extends State<GamePage> {
                 ),
                 onPressed: canRemove
                     ? () {
-                        if (stagedCount > 0) {
-                          setState(() {
-                            _stagedChanges[item] = stagedCount - 1;
-                            if (item == Territories.field.item && _stagedFieldConfigs.isNotEmpty) {
-                              _stagedFieldConfigs.removeLast();
-                            }
-                            if (item == Buildings.river.item && _stagedRiverConfigs.isNotEmpty) {
-                              _stagedRiverConfigs.removeLast();
-                            }
-                            
-                            if (item == Territories.horse.item || item == Territories.sheep.item) {
-                              int conquered = _stagedConqueredAnimals[item] ?? 0;
-                              if (stagedCount - 1 < conquered) {
-                                _stagedConqueredAnimals[item] = conquered - 1;
-                              }
-                            }
-                          });
+                        if (item == Territories.field.item || item == Buildings.river.item) {
+                          bool hasNew = additions > 0;
+                          bool hasOld = (baseCount - removals) > 0;
+
+                          if (hasNew && hasOld) {
+                            _showMinusActionDialog(context, item);
+                          } else if (hasNew) {
+                            setState(() {
+                              _stagedAdditions[item] = additions - 1;
+                              if (item == Territories.field.item) _stagedFieldConfigs.removeLast();
+                              if (item == Buildings.river.item) _stagedRiverConfigs.removeLast();
+                            });
+                          } else if (hasOld) {
+                            _showRemoveIrrigationDialog(context, item: item, isField: item == Territories.field.item);
+                          }
                         } else {
-                          if (item == Territories.field.item) {
-                            _showRemoveIrrigationDialog(context, isField: true);
-                          } else if (item == Buildings.river.item) {
-                            _showRemoveIrrigationDialog(context, isField: false);
+                          // Logica per oggetti semplici / animali
+                          if (additions > 0) {
+                            setState(() {
+                              _stagedAdditions[item] = additions - 1;
+                              if (item == Territories.horse.item || item == Territories.sheep.item) {
+                                int conquered = _stagedConqueredAnimals[item] ?? 0;
+                                if (additions - 1 < conquered) {
+                                  _stagedConqueredAnimals[item] = conquered - 1;
+                                }
+                              }
+                            });
                           } else {
                             setState(() {
-                              _stagedChanges[item] = stagedCount - 1;
+                              _stagedRemovals[item] = removals + 1;
                             });
                           }
                         }
@@ -1001,7 +1029,7 @@ class _GamePageState extends State<GamePage> {
                     ? () {
                         if (isUndoingRemoval) {
                           setState(() {
-                            _stagedChanges[item] = stagedCount + 1;
+                            _stagedRemovals[item] = removals - 1;
                             if (item == Territories.field.item && _stagedFieldRemovals.isNotEmpty) {
                               _stagedFieldRemovals.removeLast();
                             } else if (item == Buildings.river.item && _stagedRiverRemovals.isNotEmpty) {
@@ -1021,12 +1049,11 @@ class _GamePageState extends State<GamePage> {
                               isField: false,
                               isStaging: true,
                             );
-                          } else if (item == Territories.horse.item ||
-                              item == Territories.sheep.item) {
-                            _showAnimalActionDialog(context, item, stagedCount);
+                          } else if (item == Territories.horse.item || item == Territories.sheep.item) {
+                            _showAnimalActionDialog(context, item, additions);
                           } else {
                             setState(() {
-                              _stagedChanges[item] = stagedCount + 1;
+                              _stagedAdditions[item] = additions + 1;
                             });
                           }
                         }
@@ -1043,7 +1070,7 @@ class _GamePageState extends State<GamePage> {
   void _showAnimalActionDialog(
     BuildContext context,
     GameItem item,
-    int stagedCount,
+    int additions,
   ) {
     bool canReproduce = _simulateAndCheck((g) => g.canAction(item));
 
@@ -1083,7 +1110,7 @@ class _GamePageState extends State<GamePage> {
               ),
               onPressed: () {
                 setState(() {
-                  _stagedChanges[item] = stagedCount + 1;
+                  _stagedAdditions[item] = additions + 1;
                   _stagedConqueredAnimals[item] =
                       (_stagedConqueredAnimals[item] ?? 0) + 1;
                 });
@@ -1112,7 +1139,7 @@ class _GamePageState extends State<GamePage> {
               onPressed: canReproduce
                   ? () {
                       setState(() {
-                        _stagedChanges[item] = stagedCount + 1;
+                        _stagedAdditions[item] = additions + 1;
                       });
                       Navigator.pop(context);
                     }
@@ -1737,12 +1764,12 @@ class _GamePageState extends State<GamePage> {
                   if (isStaging) {
                     setState(() {
                       if (isField) {
-                        _stagedChanges[Territories.field.item] =
-                            (_stagedChanges[Territories.field.item] ?? 0) + 1;
+                        _stagedAdditions[Territories.field.item] =
+                            (_stagedAdditions[Territories.field.item] ?? 0) + 1;
                         _stagedFieldConfigs.add(count);
                       } else {
-                        _stagedChanges[Buildings.river.item] =
-                            (_stagedChanges[Buildings.river.item] ?? 0) + 1;
+                        _stagedAdditions[Buildings.river.item] =
+                            (_stagedAdditions[Buildings.river.item] ?? 0) + 1;
                         _stagedRiverConfigs.add(count);
                       }
                     });
@@ -1754,9 +1781,8 @@ class _GamePageState extends State<GamePage> {
                       }
                     } else {
                       if (game.canAction(Buildings.river.item)) {
-                        int i = 1;
                         game.action(Buildings.river.item);
-                        game.addRiverWithFields(count, i);
+                        game.addRiverWithFields(count, 1);
                       }
                     }
                   }
@@ -1786,8 +1812,73 @@ class _GamePageState extends State<GamePage> {
     );
   }
 
+  void _showMinusActionDialog(BuildContext context, GameItem item) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFFF3E5AB),
+          shape: BeveledRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0xFF4E342E), width: 3),
+          ),
+          title: Text(
+            'RIMOZIONE ${item.name.toUpperCase()}',
+            style: const TextStyle(fontWeight: FontWeight.w900),
+            textAlign: TextAlign.center,
+          ),
+          content: const Text(
+            'Vuoi annullare la costruzione che hai appena inserito (recuperando i costi) o distruggere un elemento già esistente (perdendolo)?',
+            style: TextStyle(fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFCC80),
+                side: const BorderSide(color: Color(0xFF4E342E), width: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              onPressed: () {
+                setState(() {
+                  _stagedAdditions[item] = (_stagedAdditions[item] ?? 0) - 1;
+                  if (item == Territories.field.item) _stagedFieldConfigs.removeLast();
+                  if (item == Buildings.river.item) _stagedRiverConfigs.removeLast();
+                });
+                Navigator.pop(context);
+              },
+              child: const Text(
+                'Annulla\nCostruzione',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xFFE65100), fontWeight: FontWeight.bold),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFEF9A9A),
+                side: const BorderSide(color: Color(0xFF4E342E), width: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              onPressed: () {
+                Navigator.pop(context);
+                _showRemoveIrrigationDialog(context, item: item, isField: item == Territories.field.item);
+              },
+              child: const Text(
+                'Distruggi\nEsistente',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xFFC62828), fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showRemoveIrrigationDialog(
     BuildContext context, {
+    required GameItem item,
     required bool isField,
   }) {
     int count = 0;
@@ -1833,13 +1924,10 @@ class _GamePageState extends State<GamePage> {
                   if (count > maxLimit) count = maxLimit;
 
                   setState(() {
+                    _stagedRemovals[item] = (_stagedRemovals[item] ?? 0) + 1;
                     if (isField) {
-                      _stagedChanges[Territories.field.item] =
-                          (_stagedChanges[Territories.field.item] ?? 0) - 1;
                       _stagedFieldRemovals.add(count);
                     } else {
-                      _stagedChanges[Buildings.river.item] =
-                          (_stagedChanges[Buildings.river.item] ?? 0) - 1;
                       _stagedRiverRemovals.add(count);
                     }
                   });
